@@ -1,0 +1,243 @@
+using Microsoft.Extensions.Options;
+using OrderService.Configuration;
+using OrderService.Models.DTOs;
+using OrderService.Models.Entities;
+using OrderService.Models.Enums;
+using OrderService.Repositories;
+
+namespace OrderService.Services;
+
+/// <summary>
+/// Service implementation for order business logic
+/// </summary>
+public class OrderService : IOrderService
+{
+    private readonly IOrderRepository _orderRepository;
+    private readonly ILogger<OrderService> _logger;
+    private readonly OrderServiceSettings _settings;
+
+    public OrderService(
+        IOrderRepository orderRepository, 
+        ILogger<OrderService> logger,
+        IOptions<OrderServiceSettings> settings)
+    {
+        _orderRepository = orderRepository;
+        _logger = logger;
+        _settings = settings.Value;
+    }
+
+    /// <summary>
+    /// Get all orders
+    /// </summary>
+    public async Task<IEnumerable<OrderResponseDto>> GetAllOrdersAsync()
+    {
+        _logger.LogInformation("Fetching all orders");
+        
+        var orders = await _orderRepository.GetAllOrdersAsync();
+        var orderDtos = orders.Select(MapToOrderResponseDto).ToList();
+        
+        _logger.LogInformation("Retrieved {Count} orders", orderDtos.Count);
+        return orderDtos;
+    }
+
+    /// <summary>
+    /// Get order by ID
+    /// </summary>
+    public async Task<OrderResponseDto?> GetOrderByIdAsync(Guid id)
+    {
+        _logger.LogInformation("Fetching order with ID: {OrderId}", id);
+        
+        var order = await _orderRepository.GetOrderByIdAsync(id);
+        if (order == null)
+        {
+            _logger.LogWarning("Order with ID {OrderId} not found", id);
+            return null;
+        }
+
+        _logger.LogInformation("Retrieved order: {OrderNumber}", order.OrderNumber);
+        return MapToOrderResponseDto(order);
+    }
+
+    /// <summary>
+    /// Get orders by customer ID
+    /// </summary>
+    public async Task<IEnumerable<OrderResponseDto>> GetOrdersByCustomerIdAsync(string customerId)
+    {
+        _logger.LogInformation("Fetching orders for customer: {CustomerId}", customerId);
+        
+        var orders = await _orderRepository.GetOrdersByCustomerIdAsync(customerId);
+        var orderDtos = orders.Select(MapToOrderResponseDto).ToList();
+        
+        _logger.LogInformation("Retrieved {Count} orders for customer {CustomerId}", orderDtos.Count, customerId);
+        return orderDtos;
+    }
+
+    /// <summary>
+    /// Create a new order
+    /// </summary>
+    public async Task<OrderResponseDto> CreateOrderAsync(CreateOrderDto createOrderDto)
+    {
+        _logger.LogInformation("Creating new order for customer: {CustomerId}", createOrderDto.CustomerId);
+
+        // Generate order number using configuration
+        var orderNumber = GenerateOrderNumber();
+
+        // Create order entity
+        var order = new Order
+        {
+            CustomerId = createOrderDto.CustomerId,
+            OrderNumber = orderNumber,
+            Status = OrderStatus.Created,
+            PaymentStatus = PaymentStatus.Pending,
+            ShippingStatus = ShippingStatus.NotShipped,
+            Currency = _settings.DefaultCurrency,
+            CreatedBy = "System", // TODO: Get from authenticated user
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+
+        // Add order items and calculate totals
+        decimal subtotal = 0;
+        foreach (var itemDto in createOrderDto.Items)
+        {
+            var orderItem = new OrderItem
+            {
+                ProductId = itemDto.ProductId,
+                ProductName = itemDto.ProductName,
+                UnitPrice = itemDto.UnitPrice,
+                Quantity = itemDto.Quantity,
+                TotalPrice = itemDto.UnitPrice * itemDto.Quantity,
+                DiscountAmount = 0,
+                TaxAmount = 0,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+            
+            order.Items.Add(orderItem);
+            subtotal += orderItem.TotalPrice;
+        }
+
+        // Calculate order totals using configuration
+        order.Subtotal = subtotal;
+        order.TaxAmount = subtotal * (decimal)_settings.TaxRate;
+        order.ShippingCost = subtotal > (decimal)_settings.FreeShippingThreshold ? 0 : (decimal)_settings.DefaultShippingCost;
+        order.DiscountAmount = 0;
+        order.TotalAmount = order.Subtotal + order.TaxAmount + order.ShippingCost - order.DiscountAmount;
+
+        // Save to database
+        var createdOrder = await _orderRepository.CreateOrderAsync(order);
+        
+        _logger.LogInformation("Created order: {OrderNumber} with total: {Total:C}", 
+            createdOrder.OrderNumber, createdOrder.TotalAmount);
+
+        return MapToOrderResponseDto(createdOrder);
+    }
+
+    /// <summary>
+    /// Update order status
+    /// </summary>
+    public async Task<OrderResponseDto?> UpdateOrderStatusAsync(Guid id, UpdateOrderStatusDto updateStatusDto)
+    {
+        _logger.LogInformation("Updating status for order {OrderId} to {Status}", id, updateStatusDto.Status);
+
+        var order = await _orderRepository.GetOrderByIdAsync(id);
+        if (order == null)
+        {
+            _logger.LogWarning("Order with ID {OrderId} not found", id);
+            return null;
+        }
+
+        order.Status = updateStatusDto.Status;
+        order.UpdatedBy = "System"; // TODO: Get from authenticated user
+
+        var updatedOrder = await _orderRepository.UpdateOrderAsync(order);
+        
+        _logger.LogInformation("Updated order {OrderNumber} status to {Status}", 
+            updatedOrder.OrderNumber, updateStatusDto.Status);
+
+        return MapToOrderResponseDto(updatedOrder);
+    }
+
+    /// <summary>
+    /// Get orders by status
+    /// </summary>
+    public async Task<IEnumerable<OrderResponseDto>> GetOrdersByStatusAsync(OrderStatus status)
+    {
+        _logger.LogInformation("Fetching orders with status: {Status}", status);
+        
+        var orders = await _orderRepository.GetOrdersByStatusAsync(status);
+        var orderDtos = orders.Select(MapToOrderResponseDto).ToList();
+        
+        _logger.LogInformation("Retrieved {Count} orders with status {Status}", orderDtos.Count, status);
+        return orderDtos;
+    }
+
+    /// <summary>
+    /// Delete an order
+    /// </summary>
+    public async Task<bool> DeleteOrderAsync(Guid id)
+    {
+        _logger.LogInformation("Deleting order: {OrderId}", id);
+        
+        var result = await _orderRepository.DeleteOrderAsync(id);
+        
+        if (result)
+        {
+            _logger.LogInformation("Successfully deleted order: {OrderId}", id);
+        }
+        else
+        {
+            _logger.LogWarning("Failed to delete order: {OrderId}", id);
+        }
+        
+        return result;
+    }
+
+    /// <summary>
+    /// Generate order number using configuration
+    /// </summary>
+    private string GenerateOrderNumber()
+    {
+        return $"{_settings.OrderNumberPrefix}-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid().ToString("N")[..8].ToUpper()}";
+    }
+
+    /// <summary>
+    /// Map Order entity to OrderResponseDto
+    /// </summary>
+    private static OrderResponseDto MapToOrderResponseDto(Order order)
+    {
+        return new OrderResponseDto
+        {
+            Id = order.Id,
+            CustomerId = order.CustomerId,
+            OrderNumber = order.OrderNumber,
+            Status = order.Status,
+            PaymentStatus = order.PaymentStatus,
+            ShippingStatus = order.ShippingStatus,
+            Subtotal = order.Subtotal,
+            TaxAmount = order.TaxAmount,
+            ShippingCost = order.ShippingCost,
+            DiscountAmount = order.DiscountAmount,
+            TotalAmount = order.TotalAmount,
+            Currency = order.Currency,
+            CreatedAt = order.CreatedAt,
+            UpdatedAt = order.UpdatedAt,
+            CreatedBy = order.CreatedBy,
+            UpdatedBy = order.UpdatedBy,
+            Items = order.Items.Select(item => new OrderItemResponseDto
+            {
+                Id = item.Id,
+                ProductId = item.ProductId,
+                ProductName = item.ProductName,
+                ProductSku = item.ProductSku,
+                UnitPrice = item.UnitPrice,
+                Quantity = item.Quantity,
+                TotalPrice = item.TotalPrice,
+                DiscountAmount = item.DiscountAmount,
+                TaxAmount = item.TaxAmount,
+                CreatedAt = item.CreatedAt,
+                UpdatedAt = item.UpdatedAt
+            }).ToList()
+        };
+    }
+}
