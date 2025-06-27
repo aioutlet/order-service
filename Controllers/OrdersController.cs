@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 using OrderService.Models.DTOs;
 using OrderService.Models.Enums;
 using OrderService.Services;
@@ -7,6 +8,7 @@ namespace OrderService.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize] // Require authentication for all endpoints
 public class OrdersController : ControllerBase
 {
     private readonly IOrderService _orderService;
@@ -19,9 +21,10 @@ public class OrdersController : ControllerBase
     }
 
     /// <summary>
-    /// Get all orders
+    /// Get all orders (Admin only)
     /// </summary>
     [HttpGet]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<ActionResult<IEnumerable<OrderResponseDto>>> GetOrders()
     {
         try
@@ -37,9 +40,10 @@ public class OrdersController : ControllerBase
     }
 
     /// <summary>
-    /// Get order by ID
+    /// Get order by ID (Customer can view own orders, Admin can view all)
     /// </summary>
     [HttpGet("{id}")]
+    [Authorize(Policy = "CustomerOrAdmin")]
     public async Task<ActionResult<OrderResponseDto>> GetOrder(Guid id)
     {
         try
@@ -49,6 +53,15 @@ public class OrdersController : ControllerBase
             if (order == null)
             {
                 return NotFound($"Order with ID {id} not found");
+            }
+
+            // Check if customer is trying to access their own order
+            var customerIdFromToken = User.FindFirst("sub")?.Value;
+            var isAdmin = User.HasClaim("roles", "admin");
+            
+            if (!isAdmin && customerIdFromToken != order.CustomerId)
+            {
+                return Forbid("You can only view your own orders");
             }
 
             return Ok(order);
@@ -61,13 +74,23 @@ public class OrdersController : ControllerBase
     }
 
     /// <summary>
-    /// Create a new order
+    /// Create a new order (Customer only)
     /// </summary>
     [HttpPost]
+    [Authorize(Policy = "CustomerOnly")]
     public async Task<ActionResult<OrderResponseDto>> CreateOrder(CreateOrderDto createOrderDto)
     {
         try
         {
+            // Get customer ID from JWT token claims
+            var customerIdFromToken = User.FindFirst("sub")?.Value;
+            
+            // Ensure the customer can only create orders for themselves
+            if (customerIdFromToken != createOrderDto.CustomerId)
+            {
+                return Forbid("You can only create orders for yourself");
+            }
+
             var order = await _orderService.CreateOrderAsync(createOrderDto);
             return CreatedAtAction(nameof(GetOrder), new { id = order.Id }, order);
         }
@@ -79,9 +102,10 @@ public class OrdersController : ControllerBase
     }
 
     /// <summary>
-    /// Update order status
+    /// Update order status (Admin only)
     /// </summary>
     [HttpPut("{id}/status")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<ActionResult<OrderResponseDto>> UpdateOrderStatus(Guid id, UpdateOrderStatusDto updateStatusDto)
     {
         try
@@ -103,13 +127,23 @@ public class OrdersController : ControllerBase
     }
 
     /// <summary>
-    /// Get orders by customer ID
+    /// Get orders by customer ID (Customer can view own orders, Admin can view all)
     /// </summary>
     [HttpGet("customer/{customerId}")]
+    [Authorize(Policy = "CustomerOrAdmin")]
     public async Task<ActionResult<IEnumerable<OrderResponseDto>>> GetOrdersByCustomerId(string customerId)
     {
         try
         {
+            var customerIdFromToken = User.FindFirst("sub")?.Value;
+            var isAdmin = User.HasClaim("roles", "admin");
+            
+            // Customers can only view their own orders, admins can view any customer's orders
+            if (!isAdmin && customerIdFromToken != customerId)
+            {
+                return Forbid("You can only view your own orders");
+            }
+
             var orders = await _orderService.GetOrdersByCustomerIdAsync(customerId);
             return Ok(orders);
         }
@@ -121,9 +155,10 @@ public class OrdersController : ControllerBase
     }
 
     /// <summary>
-    /// Get orders by status
+    /// Get orders by status (Admin only)
     /// </summary>
     [HttpGet("status/{status}")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<ActionResult<IEnumerable<OrderResponseDto>>> GetOrdersByStatus(OrderStatus status)
     {
         try
@@ -139,9 +174,10 @@ public class OrdersController : ControllerBase
     }
 
     /// <summary>
-    /// Delete an order
+    /// Delete an order (Admin only)
     /// </summary>
     [HttpDelete("{id}")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<ActionResult> DeleteOrder(Guid id)
     {
         try
