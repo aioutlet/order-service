@@ -3,10 +3,14 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
+using FluentValidation;
 using OrderService.Data;
 using OrderService.Configuration;
 using OrderService.Repositories;
 using OrderService.Services;
+using OrderService.Services.Messaging;
+using OrderService.Middlewares;
+using OrderService.Validators;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -20,6 +24,10 @@ builder.Services.Configure<JwtSettings>(
 
 // Add services to the container.
 builder.Services.AddControllers();
+
+// Add FluentValidation
+builder.Services.AddValidatorsFromAssemblyContaining<CreateOrderDtoValidator>();
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
@@ -89,9 +97,23 @@ builder.Services.AddDbContext<OrderDbContext>(options =>
 builder.Services.AddScoped<IOrderRepository, OrderRepository>();
 builder.Services.AddScoped<IOrderService, OrderService.Services.OrderService>();
 
+// Configure message broker settings
+builder.Services.Configure<MessageBrokerSettings>(
+    builder.Configuration.GetSection(MessageBrokerSettings.SectionName));
+
+// Register message broker implementations
+builder.Services.AddTransient<RabbitMQPublisher>();
+builder.Services.AddTransient<AzureServiceBusPublisher>();
+builder.Services.AddSingleton<IMessagePublisherFactory, MessagePublisherFactory>();
+builder.Services.AddScoped<IMessagePublisher, MessagePublisherService>();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
+
+// Add global error handling middleware
+app.UseErrorHandling();
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();

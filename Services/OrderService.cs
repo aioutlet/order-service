@@ -3,7 +3,9 @@ using OrderService.Configuration;
 using OrderService.Models.DTOs;
 using OrderService.Models.Entities;
 using OrderService.Models.Enums;
+using OrderService.Models.Events;
 using OrderService.Repositories;
+using OrderService.Services.Messaging;
 
 namespace OrderService.Services;
 
@@ -15,15 +17,21 @@ public class OrderService : IOrderService
     private readonly IOrderRepository _orderRepository;
     private readonly ILogger<OrderService> _logger;
     private readonly OrderServiceSettings _settings;
+    private readonly IMessagePublisher _messagePublisher;
+    private readonly MessageBrokerSettings _messageBrokerSettings;
 
     public OrderService(
         IOrderRepository orderRepository, 
         ILogger<OrderService> logger,
-        IOptions<OrderServiceSettings> settings)
+        IOptions<OrderServiceSettings> settings,
+        IMessagePublisher messagePublisher,
+        IOptions<MessageBrokerSettings> messageBrokerSettings)
     {
         _orderRepository = orderRepository;
         _logger = logger;
         _settings = settings.Value;
+        _messagePublisher = messagePublisher;
+        _messageBrokerSettings = messageBrokerSettings.Value;
     }
 
     /// <summary>
@@ -150,6 +158,21 @@ public class OrderService : IOrderService
         
         _logger.LogInformation("Created order: {OrderNumber} with total: {Total:C}", 
             createdOrder.OrderNumber, createdOrder.TotalAmount);
+
+        // Publish order created event for loose coupling
+        try
+        {
+            var orderCreatedEvent = MapToOrderCreatedEvent(createdOrder);
+            await _messagePublisher.PublishAsync(_messageBrokerSettings.Topics.OrderCreated, orderCreatedEvent);
+            
+            _logger.LogInformation("Published OrderCreated event for order: {OrderNumber}", createdOrder.OrderNumber);
+        }
+        catch (Exception ex)
+        {
+            // Log error but don't fail the order creation
+            _logger.LogError(ex, "Failed to publish OrderCreated event for order: {OrderNumber}. Order was created successfully.", 
+                createdOrder.OrderNumber);
+        }
 
         return MapToOrderResponseDto(createdOrder);
     }
@@ -303,6 +326,48 @@ public class OrderService : IOrderService
                 Country = order.ShippingAddress.Country
             },
             BillingAddress = new AddressDto
+            {
+                AddressLine1 = order.BillingAddress.AddressLine1,
+                AddressLine2 = order.BillingAddress.AddressLine2,
+                City = order.BillingAddress.City,
+                State = order.BillingAddress.State,
+                ZipCode = order.BillingAddress.ZipCode,
+                Country = order.BillingAddress.Country
+            }
+        };
+    }
+
+    /// <summary>
+    /// Map Order entity to OrderCreatedEvent for messaging
+    /// </summary>
+    private static OrderCreatedEvent MapToOrderCreatedEvent(Order order)
+    {
+        return new OrderCreatedEvent
+        {
+            OrderId = order.Id,
+            CustomerId = order.CustomerId,
+            OrderNumber = order.OrderNumber,
+            TotalAmount = order.TotalAmount,
+            Currency = order.Currency,
+            CreatedAt = order.CreatedAt,
+            Items = order.Items.Select(item => new OrderItemEvent
+            {
+                ProductId = item.ProductId,
+                ProductName = item.ProductName,
+                Quantity = item.Quantity,
+                UnitPrice = item.UnitPrice,
+                TotalPrice = item.TotalPrice
+            }).ToList(),
+            ShippingAddress = new AddressEvent
+            {
+                AddressLine1 = order.ShippingAddress.AddressLine1,
+                AddressLine2 = order.ShippingAddress.AddressLine2,
+                City = order.ShippingAddress.City,
+                State = order.ShippingAddress.State,
+                ZipCode = order.ShippingAddress.ZipCode,
+                Country = order.ShippingAddress.Country
+            },
+            BillingAddress = new AddressEvent
             {
                 AddressLine1 = order.BillingAddress.AddressLine1,
                 AddressLine2 = order.BillingAddress.AddressLine2,
