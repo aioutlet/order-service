@@ -42,4 +42,14 @@ public interface IOrderService
     /// Delete an order
     /// </summary>
     Task<bool> DeleteOrderAsync(Guid id);
+
+    /// <summary>
+    /// Get orders with pagination and filtering
+    /// </summary>
+    Task<PagedResponseDto<OrderResponseDto>> GetOrdersPagedAsync(OrderQueryDto query);
+
+    /// <summary>
+    /// Get orders by customer ID with pagination
+    /// </summary>
+    Task<PagedResponseDto<OrderResponseDto>> GetOrdersByCustomerIdPagedAsync(string customerId, PagedRequestDto pageRequest);
 }

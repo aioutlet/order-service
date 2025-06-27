@@ -21,4 +21,6 @@ public class OrderResponseDto
     public string CreatedBy { get; set; } = string.Empty;
     public string? UpdatedBy { get; set; }
     public List<OrderItemResponseDto> Items { get; set; } = new();
+    public AddressDto ShippingAddress { get; set; } = new();
+    public AddressDto BillingAddress { get; set; } = new();
 }

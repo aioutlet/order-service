@@ -35,21 +35,9 @@ public class Order
     public string CustomerPhone { get; set; } = string.Empty;
     public string CustomerName { get; set; } = string.Empty;
     
-    // Shipping Address
-    public string ShippingAddressLine1 { get; set; } = string.Empty;
-    public string ShippingAddressLine2 { get; set; } = string.Empty;
-    public string ShippingCity { get; set; } = string.Empty;
-    public string ShippingState { get; set; } = string.Empty;
-    public string ShippingZipCode { get; set; } = string.Empty;
-    public string ShippingCountry { get; set; } = string.Empty;
-    
-    // Billing Address
-    public string BillingAddressLine1 { get; set; } = string.Empty;
-    public string BillingAddressLine2 { get; set; } = string.Empty;
-    public string BillingCity { get; set; } = string.Empty;
-    public string BillingState { get; set; } = string.Empty;
-    public string BillingZipCode { get; set; } = string.Empty;
-    public string BillingCountry { get; set; } = string.Empty;
+    // Addresses - using owned entity types (value objects)
+    public Address ShippingAddress { get; set; } = new();
+    public Address BillingAddress { get; set; } = new();
     
     // Payment Information
     public string? PaymentMethodId { get; set; } // Reference to payment method
@@ -71,17 +59,7 @@ public class Order
     public decimal TaxRate { get; set; }
     public string? Notes { get; set; }
     public string? InternalNotes { get; set; } // For admin/support use
-    
-    // Source tracking
-    public string? OrderSource { get; set; } // web, mobile, admin, api
-    public string? UserAgent { get; set; }
-    public string? IpAddress { get; set; }
-    
-    // Priority and urgency
-    public OrderPriority Priority { get; set; } = OrderPriority.Normal;
-    public bool IsGift { get; set; }
-    public string? GiftMessage { get; set; }
-    
+      
     // Cancellation
     public DateTime? CancelledDate { get; set; }
     public string? CancellationReason { get; set; }

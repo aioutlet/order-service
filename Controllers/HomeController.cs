@@ -21,6 +21,7 @@ public class HomeController : ControllerBase
     /// <summary>
     /// Get welcome message
     /// </summary>
+    /// <route>GET /api/home</route>
     [HttpGet]
     public ActionResult<object> GetWelcomeMessage()
     {
@@ -37,6 +38,7 @@ public class HomeController : ControllerBase
     /// <summary>
     /// Get API version information
     /// </summary>
+    /// <route>GET /api/home/version</route>
     [HttpGet("version")]
     public ActionResult<object> GetVersion()
     {
@@ -56,6 +58,7 @@ public class HomeController : ControllerBase
     /// <summary>
     /// Health check endpoint
     /// </summary>
+    /// <route>GET /api/home/health</route>
     [HttpGet("health")]
     public ActionResult<object> Health()
     {

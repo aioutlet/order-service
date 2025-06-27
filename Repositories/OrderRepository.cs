@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using OrderService.Data;
 using OrderService.Models.Entities;
 using OrderService.Models.Enums;
+using OrderService.Models.DTOs;
 
 namespace OrderService.Repositories;
 
@@ -20,7 +21,7 @@ public class OrderRepository : IOrderRepository
     }
 
     /// <summary>
-    /// Get all orders with their items
+    /// Get all orders with their items (addresses are automatically included as owned types)
     /// </summary>
     public async Task<IEnumerable<Order>> GetAllOrdersAsync()
     {
@@ -33,7 +34,7 @@ public class OrderRepository : IOrderRepository
     }
 
     /// <summary>
-    /// Get order by ID with items included
+    /// Get order by ID with items included (addresses are automatically included as owned types)
     /// </summary>
     public async Task<Order?> GetOrderByIdAsync(Guid id)
     {
@@ -128,5 +129,90 @@ public class OrderRepository : IOrderRepository
             .Where(o => o.Status == status)
             .OrderByDescending(o => o.CreatedAt)
             .ToListAsync();
+    }
+
+    /// <summary>
+    /// Get orders with pagination and filtering
+    /// </summary>
+    public async Task<(IEnumerable<Order> Orders, int TotalCount)> GetOrdersPagedAsync(OrderQueryDto query)
+    {
+        _logger.LogDebug("Fetching paged orders - Page: {Page}, PageSize: {PageSize}", query.Page, query.PageSize);
+
+        var queryable = _context.Orders.Include(o => o.Items).AsQueryable();
+
+        // Apply filters
+        if (query.Status.HasValue)
+        {
+            queryable = queryable.Where(o => o.Status == query.Status.Value);
+        }
+
+        if (!string.IsNullOrEmpty(query.CustomerId))
+        {
+            queryable = queryable.Where(o => o.CustomerId == query.CustomerId);
+        }
+
+        if (query.OrderDateFrom.HasValue)
+        {
+            queryable = queryable.Where(o => o.CreatedAt >= query.OrderDateFrom.Value);
+        }
+
+        if (query.OrderDateTo.HasValue)
+        {
+            var endDate = query.OrderDateTo.Value.Date.AddDays(1); // Include entire day
+            queryable = queryable.Where(o => o.CreatedAt < endDate);
+        }
+
+        // Apply sorting
+        queryable = query.SortBy switch
+        {
+            OrderSortBy.OrderDateAsc => queryable.OrderBy(o => o.CreatedAt),
+            OrderSortBy.OrderDateDesc => queryable.OrderByDescending(o => o.CreatedAt),
+            OrderSortBy.TotalAmountAsc => queryable.OrderBy(o => o.TotalAmount),
+            OrderSortBy.TotalAmountDesc => queryable.OrderByDescending(o => o.TotalAmount),
+            OrderSortBy.StatusAsc => queryable.OrderBy(o => o.Status),
+            OrderSortBy.StatusDesc => queryable.OrderByDescending(o => o.Status),
+            _ => queryable.OrderByDescending(o => o.CreatedAt)
+        };
+
+        // Get total count before pagination
+        var totalCount = await queryable.CountAsync();
+
+        // Apply pagination
+        var orders = await queryable
+            .Skip(query.Skip)
+            .Take(query.PageSize)
+            .ToListAsync();
+
+        _logger.LogDebug("Retrieved {Count} orders out of {Total} total", orders.Count, totalCount);
+
+        return (orders, totalCount);
+    }
+
+    /// <summary>
+    /// Get orders by customer ID with pagination
+    /// </summary>
+    public async Task<(IEnumerable<Order> Orders, int TotalCount)> GetOrdersByCustomerIdPagedAsync(string customerId, PagedRequestDto pageRequest)
+    {
+        _logger.LogDebug("Fetching paged orders for customer: {CustomerId} - Page: {Page}, PageSize: {PageSize}", 
+            customerId, pageRequest.Page, pageRequest.PageSize);
+
+        var queryable = _context.Orders
+            .Include(o => o.Items)
+            .Where(o => o.CustomerId == customerId)
+            .OrderByDescending(o => o.CreatedAt);
+
+        // Get total count before pagination
+        var totalCount = await queryable.CountAsync();
+
+        // Apply pagination
+        var orders = await queryable
+            .Skip(pageRequest.Skip)
+            .Take(pageRequest.PageSize)
+            .ToListAsync();
+
+        _logger.LogDebug("Retrieved {Count} orders for customer {CustomerId} out of {Total} total", 
+            orders.Count, customerId, totalCount);
+
+        return (orders, totalCount);
     }
 }

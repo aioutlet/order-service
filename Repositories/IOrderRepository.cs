@@ -1,4 +1,5 @@
 using OrderService.Models.Entities;
+using OrderService.Models.DTOs;
 
 namespace OrderService.Repositories;
 
@@ -46,4 +47,14 @@ public interface IOrderRepository
     /// Get orders by status
     /// </summary>
     Task<IEnumerable<Order>> GetOrdersByStatusAsync(Models.Enums.OrderStatus status);
+
+    /// <summary>
+    /// Get orders with pagination and filtering
+    /// </summary>
+    Task<(IEnumerable<Order> Orders, int TotalCount)> GetOrdersPagedAsync(OrderQueryDto query);
+
+    /// <summary>
+    /// Get orders by customer ID with pagination
+    /// </summary>
+    Task<(IEnumerable<Order> Orders, int TotalCount)> GetOrdersByCustomerIdPagedAsync(string customerId, PagedRequestDto pageRequest);
 }

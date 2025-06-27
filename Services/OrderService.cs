@@ -117,6 +117,27 @@ public class OrderService : IOrderService
             subtotal += orderItem.TotalPrice;
         }
 
+        // Set addresses
+        order.ShippingAddress = new Address
+        {
+            AddressLine1 = createOrderDto.ShippingAddress.AddressLine1,
+            AddressLine2 = createOrderDto.ShippingAddress.AddressLine2,
+            City = createOrderDto.ShippingAddress.City,
+            State = createOrderDto.ShippingAddress.State,
+            ZipCode = createOrderDto.ShippingAddress.ZipCode,
+            Country = createOrderDto.ShippingAddress.Country
+        };
+
+        order.BillingAddress = new Address
+        {
+            AddressLine1 = createOrderDto.BillingAddress.AddressLine1,
+            AddressLine2 = createOrderDto.BillingAddress.AddressLine2,
+            City = createOrderDto.BillingAddress.City,
+            State = createOrderDto.BillingAddress.State,
+            ZipCode = createOrderDto.BillingAddress.ZipCode,
+            Country = createOrderDto.BillingAddress.Country
+        };
+
         // Calculate order totals using configuration
         order.Subtotal = subtotal;
         order.TaxAmount = subtotal * (decimal)_settings.TaxRate;
@@ -194,6 +215,40 @@ public class OrderService : IOrderService
     }
 
     /// <summary>
+    /// Get orders with pagination and filtering
+    /// </summary>
+    public async Task<PagedResponseDto<OrderResponseDto>> GetOrdersPagedAsync(OrderQueryDto query)
+    {
+        _logger.LogInformation("Fetching paged orders - Page: {Page}, PageSize: {PageSize}, Status: {Status}, CustomerId: {CustomerId}", 
+            query.Page, query.PageSize, query.Status, query.CustomerId);
+
+        var (orders, totalCount) = await _orderRepository.GetOrdersPagedAsync(query);
+        var orderDtos = orders.Select(MapToOrderResponseDto).ToList();
+
+        _logger.LogInformation("Retrieved page {Page} with {Count} orders out of {Total} total", 
+            query.Page, orderDtos.Count, totalCount);
+
+        return PagedResponseDto<OrderResponseDto>.Create(orderDtos, query.Page, query.PageSize, totalCount);
+    }
+
+    /// <summary>
+    /// Get orders by customer ID with pagination
+    /// </summary>
+    public async Task<PagedResponseDto<OrderResponseDto>> GetOrdersByCustomerIdPagedAsync(string customerId, PagedRequestDto pageRequest)
+    {
+        _logger.LogInformation("Fetching paged orders for customer: {CustomerId} - Page: {Page}, PageSize: {PageSize}", 
+            customerId, pageRequest.Page, pageRequest.PageSize);
+
+        var (orders, totalCount) = await _orderRepository.GetOrdersByCustomerIdPagedAsync(customerId, pageRequest);
+        var orderDtos = orders.Select(MapToOrderResponseDto).ToList();
+
+        _logger.LogInformation("Retrieved page {Page} with {Count} orders for customer {CustomerId} out of {Total} total", 
+            pageRequest.Page, orderDtos.Count, customerId, totalCount);
+
+        return PagedResponseDto<OrderResponseDto>.Create(orderDtos, pageRequest.Page, pageRequest.PageSize, totalCount);
+    }
+
+    /// <summary>
     /// Generate order number using configuration
     /// </summary>
     private string GenerateOrderNumber()
@@ -237,7 +292,25 @@ public class OrderService : IOrderService
                 TaxAmount = item.TaxAmount,
                 CreatedAt = item.CreatedAt,
                 UpdatedAt = item.UpdatedAt
-            }).ToList()
+            }).ToList(),
+            ShippingAddress = new AddressDto
+            {
+                AddressLine1 = order.ShippingAddress.AddressLine1,
+                AddressLine2 = order.ShippingAddress.AddressLine2,
+                City = order.ShippingAddress.City,
+                State = order.ShippingAddress.State,
+                ZipCode = order.ShippingAddress.ZipCode,
+                Country = order.ShippingAddress.Country
+            },
+            BillingAddress = new AddressDto
+            {
+                AddressLine1 = order.BillingAddress.AddressLine1,
+                AddressLine2 = order.BillingAddress.AddressLine2,
+                City = order.BillingAddress.City,
+                State = order.BillingAddress.State,
+                ZipCode = order.BillingAddress.ZipCode,
+                Country = order.BillingAddress.Country
+            }
         };
     }
 }
