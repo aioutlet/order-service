@@ -26,7 +26,7 @@ public interface IOrderService
     /// <summary>
     /// Create a new order
     /// </summary>
-    Task<OrderResponseDto> CreateOrderAsync(CreateOrderDto createOrderDto);
+    Task<OrderResponseDto> CreateOrderAsync(CreateOrderDto createOrderDto, string correlationId = "");
 
     /// <summary>
     /// Update order status

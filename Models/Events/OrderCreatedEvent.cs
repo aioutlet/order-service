@@ -6,6 +6,7 @@ namespace OrderService.Models.Events;
 public class OrderCreatedEvent
 {
     public Guid OrderId { get; set; }
+    public string CorrelationId { get; set; } = string.Empty;
     public string CustomerId { get; set; } = string.Empty;
     public string OrderNumber { get; set; } = string.Empty;
     public decimal TotalAmount { get; set; }

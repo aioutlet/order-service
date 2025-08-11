@@ -19,19 +19,22 @@ public class OrderService : IOrderService
     private readonly OrderServiceSettings _settings;
     private readonly IMessagePublisher _messagePublisher;
     private readonly MessageBrokerSettings _messageBrokerSettings;
+    private readonly ICurrentUserService _currentUserService;
 
     public OrderService(
         IOrderRepository orderRepository, 
         ILogger<OrderService> logger,
         IOptions<OrderServiceSettings> settings,
         IMessagePublisher messagePublisher,
-        IOptions<MessageBrokerSettings> messageBrokerSettings)
+        IOptions<MessageBrokerSettings> messageBrokerSettings,
+        ICurrentUserService currentUserService)
     {
         _orderRepository = orderRepository;
         _logger = logger;
         _settings = settings.Value;
         _messagePublisher = messagePublisher;
         _messageBrokerSettings = messageBrokerSettings.Value;
+        _currentUserService = currentUserService;
     }
 
     /// <summary>
@@ -83,9 +86,16 @@ public class OrderService : IOrderService
     /// <summary>
     /// Create a new order
     /// </summary>
-    public async Task<OrderResponseDto> CreateOrderAsync(CreateOrderDto createOrderDto)
+    public async Task<OrderResponseDto> CreateOrderAsync(CreateOrderDto createOrderDto, string correlationId = "")
     {
-        _logger.LogInformation("Creating new order for customer: {CustomerId}", createOrderDto.CustomerId);
+        // Use provided correlation ID or generate new one
+        var currentCorrelationId = !string.IsNullOrEmpty(correlationId) ? correlationId : Guid.NewGuid().ToString();
+        
+        // Get current user info
+        var currentUser = _currentUserService.GetUserName() ?? _currentUserService.GetUserId() ?? "System";
+        
+        _logger.LogInformation("Creating new order for customer: {CustomerId} by user: {CreatedBy} [CorrelationId: {CorrelationId}]", 
+            createOrderDto.CustomerId, currentUser, currentCorrelationId);
 
         // Generate order number using configuration
         var orderNumber = GenerateOrderNumber();
@@ -99,7 +109,7 @@ public class OrderService : IOrderService
             PaymentStatus = PaymentStatus.Pending,
             ShippingStatus = ShippingStatus.NotShipped,
             Currency = _settings.DefaultCurrency,
-            CreatedBy = "System", // TODO: Get from authenticated user
+            CreatedBy = currentUser,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
@@ -162,10 +172,11 @@ public class OrderService : IOrderService
         // Publish order created event for loose coupling
         try
         {
-            var orderCreatedEvent = MapToOrderCreatedEvent(createdOrder);
+            var orderCreatedEvent = MapToOrderCreatedEvent(createdOrder, currentCorrelationId);
             await _messagePublisher.PublishAsync(_messageBrokerSettings.Topics.OrderCreated, orderCreatedEvent);
             
-            _logger.LogInformation("Published OrderCreated event for order: {OrderNumber}", createdOrder.OrderNumber);
+            _logger.LogInformation("Published OrderCreated event for order: {OrderNumber} [CorrelationId: {CorrelationId}]", 
+                createdOrder.OrderNumber, currentCorrelationId);
         }
         catch (Exception ex)
         {
@@ -182,7 +193,10 @@ public class OrderService : IOrderService
     /// </summary>
     public async Task<OrderResponseDto?> UpdateOrderStatusAsync(Guid id, UpdateOrderStatusDto updateStatusDto)
     {
-        _logger.LogInformation("Updating status for order {OrderId} to {Status}", id, updateStatusDto.Status);
+        var currentUser = _currentUserService.GetUserName() ?? _currentUserService.GetUserId() ?? "System";
+        
+        _logger.LogInformation("Updating status for order {OrderId} to {Status} by user: {UpdatedBy}", 
+            id, updateStatusDto.Status, currentUser);
 
         var order = await _orderRepository.GetOrderByIdAsync(id);
         if (order == null)
@@ -192,7 +206,8 @@ public class OrderService : IOrderService
         }
 
         order.Status = updateStatusDto.Status;
-        order.UpdatedBy = "System"; // TODO: Get from authenticated user
+        order.UpdatedBy = currentUser;
+        order.UpdatedAt = DateTime.UtcNow;
 
         var updatedOrder = await _orderRepository.UpdateOrderAsync(order);
         
@@ -340,11 +355,12 @@ public class OrderService : IOrderService
     /// <summary>
     /// Map Order entity to OrderCreatedEvent for messaging
     /// </summary>
-    private static OrderCreatedEvent MapToOrderCreatedEvent(Order order)
+    private static OrderCreatedEvent MapToOrderCreatedEvent(Order order, string correlationId)
     {
         return new OrderCreatedEvent
         {
             OrderId = order.Id,
+            CorrelationId = correlationId,
             CustomerId = order.CustomerId,
             OrderNumber = order.OrderNumber,
             TotalAmount = order.TotalAmount,

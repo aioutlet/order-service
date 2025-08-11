@@ -114,7 +114,10 @@ public class OrdersController : ControllerBase
                 return Forbid("You can only create orders for yourself");
             }
 
-            var order = await _orderService.CreateOrderAsync(createOrderDto);
+            // Get correlation ID from context
+            var correlationId = HttpContext.Items["CorrelationId"]?.ToString() ?? Guid.NewGuid().ToString();
+            
+            var order = await _orderService.CreateOrderAsync(createOrderDto, correlationId);
             return CreatedAtAction(nameof(GetOrder), new { id = order.Id }, order);
         }
         catch (Exception ex)

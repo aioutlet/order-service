@@ -97,9 +97,16 @@ builder.Services.AddDbContext<OrderDbContext>(options =>
 builder.Services.AddScoped<IOrderRepository, OrderRepository>();
 builder.Services.AddScoped<IOrderService, OrderService.Services.OrderService>();
 
+// Register current user service for JWT authentication
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
+
 // Configure message broker settings
 builder.Services.Configure<MessageBrokerSettings>(
     builder.Configuration.GetSection(MessageBrokerSettings.SectionName));
+
+// Register RabbitMQ connection service
+builder.Services.AddSingleton<IRabbitMQConnectionService, RabbitMQConnectionService>();
 
 // Register message broker implementations
 builder.Services.AddTransient<RabbitMQPublisher>();
@@ -107,9 +114,15 @@ builder.Services.AddTransient<AzureServiceBusPublisher>();
 builder.Services.AddSingleton<IMessagePublisherFactory, MessagePublisherFactory>();
 builder.Services.AddScoped<IMessagePublisher, MessagePublisherService>();
 
+// Register background services for event listening
+builder.Services.AddHostedService<OrderEventListener>();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
+
+// Add correlation ID middleware (before error handling)
+app.UseCorrelationId();
 
 // Add global error handling middleware
 app.UseErrorHandling();
