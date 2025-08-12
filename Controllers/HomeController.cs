@@ -54,41 +54,4 @@ public class HomeController : ControllerBase
             environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Unknown"
         });
     }
-
-    /// <summary>
-    /// Health check endpoint
-    /// </summary>
-    /// <route>GET /api/home/health</route>
-    [HttpGet("health")]
-    public ActionResult<object> Health()
-    {
-        _logger.LogDebug("Health check requested");
-        
-        try
-        {
-            // Basic health check - you can extend this to check database connectivity, etc.
-            var healthStatus = new
-            {
-                status = "ok",
-                service = "Order Service",
-                timestamp = DateTime.UtcNow,
-                uptime = DateTime.UtcNow.Subtract(Process.GetCurrentProcess().StartTime.ToUniversalTime()),
-                version = _apiSettings.Version
-            };
-
-            return Ok(healthStatus);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Health check failed");
-            
-            return StatusCode(503, new 
-            { 
-                status = "unhealthy",
-                service = "Order Service",
-                timestamp = DateTime.UtcNow,
-                error = "Service is experiencing issues"
-            });
-        }
-    }
 }
