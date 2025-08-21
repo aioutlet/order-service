@@ -305,6 +305,27 @@ main() {
         echo "✅ Order Service (.NET) setup completed successfully!"
         echo "=========================================="
         echo ""
+        
+        # Start services with Docker Compose
+        echo "🐳 Starting services with Docker Compose..."
+        if docker-compose up -d; then
+            echo "✅ Services started successfully"
+            echo ""
+            echo "⏳ Waiting for services to be ready..."
+            sleep 15
+            
+            # Check service health
+            if docker-compose ps | grep -q "Up.*healthy\|Up"; then
+                echo "✅ Services are healthy and ready"
+            else
+                echo "⚠️  Services may still be starting up"
+            fi
+        else
+            echo "❌ Failed to start services with Docker Compose"
+            return 1
+        fi
+        echo ""
+        
         echo "🏪 Setup Summary:"
         echo "  • Environment: $ASPNET_ENVIRONMENT (ASPNETCORE_ENVIRONMENT)"
         echo "  • Configuration: $(basename "$APPSETTINGS_FILE")"
@@ -317,11 +338,10 @@ main() {
         echo "  • Order Status Tracking"
         echo "  • Event Sourcing & CQRS"
         echo ""
-        echo "🚀 Next Steps:"
-        echo "  1. Review $(basename "$APPSETTINGS_FILE") configuration"
-        echo "  2. Start the service: dotnet run"
-        echo "  3. Run tests: dotnet test"
-        echo "  4. Check health: curl http://localhost:3005/health"
+        echo "🚀 Service is now running:"
+        echo "  • View status: docker-compose ps"
+        echo "  • View logs: docker-compose logs -f"
+        echo "  • Stop services: bash .ops/teardown.sh"
         echo ""
     else
         echo "❌ Setup validation failed"

@@ -1,0 +1,74 @@
+{
+  "// CONFIGURATION TEMPLATE FOR ORDER SERVICE": "",
+  "// Copy this file to appsettings.{Environment}.json and customize": "",
+  "// Available environments: Development, Production": "",
+  
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning",
+      "Microsoft.EntityFrameworkCore.Database.Command": "Warning",
+      "Microsoft.EntityFrameworkCore": "Warning"
+    }
+  },
+  
+  "AllowedHosts": "*",
+  
+  "ConnectionStrings": {
+    "DefaultConnection": "Host=localhost;Database=OrderServiceDb;Username=postgres;Password=YOUR_PASSWORD_HERE;Port=5432"
+  },
+  
+  "OrderService": {
+    "DefaultCurrency": "USD",
+    "TaxRate": 0.08,
+    "MaxOrderValue": 10000.00,
+    "OrderExpirationMinutes": 30,
+    "EnableOrderValidation": true,
+    "SupportedCurrencies": [ "USD", "EUR", "GBP" ]
+  },
+  
+  "Authentication": {
+    "JwtSecret": "YOUR_JWT_SECRET_AT_LEAST_32_CHARACTERS_LONG",
+    "JwtIssuer": "aioutlet-auth-service",
+    "JwtAudience": "aioutlet-order-service",
+    "JwtExpirationHours": 8
+  },
+  
+  "MessageBroker": {
+    "RabbitMQ": {
+      "Host": "localhost",
+      "Port": 5672,
+      "Username": "YOUR_RABBITMQ_USERNAME",
+      "Password": "YOUR_RABBITMQ_PASSWORD",
+      "VirtualHost": "/",
+      "ExchangeName": "orders.exchange"
+    }
+  },
+  
+  "ExternalServices": {
+    "PaymentService": {
+      "BaseUrl": "http://localhost:8084/api/payments",
+      "TimeoutSeconds": 30
+    },
+    "InventoryService": {
+      "BaseUrl": "http://localhost:8085/api/inventory", 
+      "TimeoutSeconds": 30
+    },
+    "NotificationService": {
+      "BaseUrl": "http://localhost:8087/api/notifications",
+      "TimeoutSeconds": 15
+    }
+  },
+  
+  "// SECURITY NOTES:": "",
+  "// 1. Never commit real passwords to version control": "",
+  "// 2. Use different credentials for each environment": "",
+  "// 3. In production, use Azure Key Vault or similar": "",
+  "// 4. Rotate passwords and JWT secrets regularly": "",
+  
+  "// ENVIRONMENT FILES:": "",
+  "// appsettings.json              - Default configuration": "",
+  "// appsettings.Development.json  - Development settings": "",
+  "// appsettings.Production.json   - Production settings": "",
+  "// appsettings.json.example      - This template file": ""
+}
