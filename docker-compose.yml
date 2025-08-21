@@ -1,57 +1,56 @@
-version: '3.8'
-
 services:
   postgres:
     image: postgres:latest
-    container_name: ${SERVICE_NAME:-order-service}-postgres-${ASPNETCORE_ENVIRONMENT:-Development}
+    container_name: order-postgres-docker
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${DB_NAME:-OrderServiceDb_Dev}
-      POSTGRES_USER: ${DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres_dev_pass}
+      POSTGRES_DB: OrderServiceDb_Dev
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres_dev_pass_123
       POSTGRES_INITDB_ARGS: '--encoding=UTF8 --locale=C'
     ports:
-      - '${DB_PORT:-5432}:5432'
+      - '5433:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./database/scripts:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-OrderServiceDb_Dev}']
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d OrderServiceDb_Dev']
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 30s
     networks:
-      - order-network
+      - aioutlet-network
 
   order-service:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: ${SERVICE_NAME:-order-service}-${ASPNETCORE_ENVIRONMENT:-Development}
+    container_name: order-service-docker
     restart: unless-stopped
     ports:
-      - '${SERVICE_PORT:-3005}:80'
-      - '${SERVICE_HTTPS_PORT:-3006}:443'
+      - '3005:80'
     environment:
-      - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Development}
-      - ASPNETCORE_URLS=http://+:80;https://+:443
-      - ConnectionStrings__DefaultConnection=Host=postgres;Database=${DB_NAME:-OrderServiceDb_Dev};Username=${DB_USER:-postgres};Password=${DB_PASSWORD:-postgres_dev_pass};Port=5432
-      - RabbitMQ__ConnectionString=${RABBITMQ_CONNECTION_STRING:-amqp://admin:admin123@host.docker.internal:5672/}
-      - JWT__Secret=${JWT_SECRET:-order-service-jwt-secret-development}
-      - JWT__Issuer=${JWT_ISSUER:-aioutlet-auth-service}
-      - JWT__Audience=${JWT_AUDIENCE:-aioutlet-order-service}
-      - ServiceDiscovery__UserServiceUrl=${USER_SERVICE_URL:-http://host.docker.internal:3002}
-      - ServiceDiscovery__PaymentServiceUrl=${PAYMENT_SERVICE_URL:-http://host.docker.internal:7000}
-      - ServiceDiscovery__InventoryServiceUrl=${INVENTORY_SERVICE_URL:-http://host.docker.internal:3004}
-      - ServiceDiscovery__NotificationServiceUrl=${NOTIFICATION_SERVICE_URL:-http://host.docker.internal:3008}
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:80
+      - ConnectionStrings__DefaultConnection=Host=postgres;Database=OrderServiceDb_Dev;Username=postgres;Password=postgres_dev_pass_123;Port=5432
+      - RabbitMQ__ConnectionString=amqp://admin:admin123@aioutlet-rabbitmq:5672/
+      - JWT__Secret=order_service_jwt_dev_secret_123
+      - JWT__Issuer=aioutlet-auth-service
+      - JWT__Audience=aioutlet-order-service
+      - ServiceDiscovery__UserServiceUrl=http://user-service-docker:80
+      - ServiceDiscovery__PaymentServiceUrl=http://payment-service-docker:80
+      - ServiceDiscovery__InventoryServiceUrl=http://inventory-service-docker:8080
+      - ServiceDiscovery__NotificationServiceUrl=http://notification-service-docker:3008
+      - Redis__ConnectionString=aioutlet-redis:6379
+      - Redis__Password=redis_dev_pass_123
     depends_on:
       postgres:
         condition: service_healthy
     volumes:
       - ./logs:/app/logs
     networks:
-      - order-network
+      - aioutlet-network
     healthcheck:
       test: ['CMD', 'curl', '-f', 'http://localhost/health']
       interval: 30s
@@ -64,5 +63,6 @@ volumes:
     driver: local
 
 networks:
-  order-network:
-    driver: bridge
+  aioutlet-network:
+    external: true
+    name: aioutlet-network
