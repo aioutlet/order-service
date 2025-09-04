@@ -6,16 +6,18 @@ using OrderService.Models.Enums;
 using OrderService.Models.Events;
 using OrderService.Repositories;
 using OrderService.Services.Messaging;
+using OrderService.Observability.Logging;
+using System.Diagnostics;
 
 namespace OrderService.Services;
 
 /// <summary>
-/// Service implementation for order business logic
+/// Service implementation for order business logic with enhanced logging and tracing
 /// </summary>
 public class OrderService : IOrderService
 {
     private readonly IOrderRepository _orderRepository;
-    private readonly ILogger<OrderService> _logger;
+    private readonly EnhancedLogger _logger;
     private readonly OrderServiceSettings _settings;
     private readonly IMessagePublisher _messagePublisher;
     private readonly MessageBrokerSettings _messageBrokerSettings;
@@ -23,7 +25,7 @@ public class OrderService : IOrderService
 
     public OrderService(
         IOrderRepository orderRepository, 
-        ILogger<OrderService> logger,
+        EnhancedLogger logger,
         IOptions<OrderServiceSettings> settings,
         IMessagePublisher messagePublisher,
         IOptions<MessageBrokerSettings> messageBrokerSettings,
@@ -42,13 +44,26 @@ public class OrderService : IOrderService
     /// </summary>
     public async Task<IEnumerable<OrderResponseDto>> GetAllOrdersAsync()
     {
-        _logger.LogInformation("Fetching all orders");
+        var stopwatch = _logger.OperationStart("GET_ALL_ORDERS", null, new {
+            operation = "GET_ALL_ORDERS"
+        });
         
-        var orders = await _orderRepository.GetAllOrdersAsync();
-        var orderDtos = orders.Select(MapToOrderResponseDto).ToList();
-        
-        _logger.LogInformation("Retrieved {Count} orders", orderDtos.Count);
-        return orderDtos;
+        try
+        {
+            var orders = await _orderRepository.GetAllOrdersAsync();
+            var orderDtos = orders.Select(MapToOrderResponseDto).ToList();
+            
+            _logger.OperationComplete("GET_ALL_ORDERS", stopwatch, null, new {
+                orderCount = orderDtos.Count
+            });
+            
+            return orderDtos;
+        }
+        catch (Exception ex)
+        {
+            _logger.OperationFailed("GET_ALL_ORDERS", stopwatch, ex, null);
+            throw;
+        }
     }
 
     /// <summary>
@@ -56,17 +71,37 @@ public class OrderService : IOrderService
     /// </summary>
     public async Task<OrderResponseDto?> GetOrderByIdAsync(Guid id)
     {
-        _logger.LogInformation("Fetching order with ID: {OrderId}", id);
+        var stopwatch = _logger.OperationStart("GET_ORDER_BY_ID", null, new {
+            operation = "GET_ORDER_BY_ID",
+            orderId = id
+        });
         
-        var order = await _orderRepository.GetOrderByIdAsync(id);
-        if (order == null)
+        try
         {
-            _logger.LogWarning("Order with ID {OrderId} not found", id);
-            return null;
-        }
+            var order = await _orderRepository.GetOrderByIdAsync(id);
+            if (order == null)
+            {
+                _logger.Warn($"Order with ID {id} not found", null, new {
+                    orderId = id,
+                    operation = "GET_ORDER_BY_ID"
+                });
+                return null;
+            }
 
-        _logger.LogInformation("Retrieved order: {OrderNumber}", order.OrderNumber);
-        return MapToOrderResponseDto(order);
+            _logger.OperationComplete("GET_ORDER_BY_ID", stopwatch, null, new {
+                orderId = id,
+                orderNumber = order.OrderNumber
+            });
+            
+            return MapToOrderResponseDto(order);
+        }
+        catch (Exception ex)
+        {
+            _logger.OperationFailed("GET_ORDER_BY_ID", stopwatch, ex, null, new {
+                orderId = id
+            });
+            throw;
+        }
     }
 
     /// <summary>
@@ -74,13 +109,30 @@ public class OrderService : IOrderService
     /// </summary>
     public async Task<IEnumerable<OrderResponseDto>> GetOrdersByCustomerIdAsync(string customerId)
     {
-        _logger.LogInformation("Fetching orders for customer: {CustomerId}", customerId);
+        var stopwatch = _logger.OperationStart("GET_ORDERS_BY_CUSTOMER", null, new {
+            operation = "GET_ORDERS_BY_CUSTOMER",
+            customerId = customerId
+        });
         
-        var orders = await _orderRepository.GetOrdersByCustomerIdAsync(customerId);
-        var orderDtos = orders.Select(MapToOrderResponseDto).ToList();
-        
-        _logger.LogInformation("Retrieved {Count} orders for customer {CustomerId}", orderDtos.Count, customerId);
-        return orderDtos;
+        try
+        {
+            var orders = await _orderRepository.GetOrdersByCustomerIdAsync(customerId);
+            var orderDtos = orders.Select(MapToOrderResponseDto).ToList();
+            
+            _logger.OperationComplete("GET_ORDERS_BY_CUSTOMER", stopwatch, null, new {
+                customerId = customerId,
+                orderCount = orderDtos.Count
+            });
+            
+            return orderDtos;
+        }
+        catch (Exception ex)
+        {
+            _logger.OperationFailed("GET_ORDERS_BY_CUSTOMER", stopwatch, ex, null, new {
+                customerId = customerId
+            });
+            throw;
+        }
     }
 
     /// <summary>
@@ -94,98 +146,130 @@ public class OrderService : IOrderService
         // Get current user info
         var currentUser = _currentUserService.GetUserName() ?? _currentUserService.GetUserId() ?? "System";
         
-        _logger.LogInformation("Creating new order for customer: {CustomerId} by user: {CreatedBy} [CorrelationId: {CorrelationId}]", 
-            createOrderDto.CustomerId, currentUser, currentCorrelationId);
+        var stopwatch = _logger.OperationStart("CREATE_ORDER", currentCorrelationId, new {
+            operation = "CREATE_ORDER",
+            customerId = createOrderDto.CustomerId,
+            orderItemsCount = createOrderDto.Items?.Count ?? 0,
+            createdBy = currentUser
+        });
 
-        // Generate order number using configuration
-        var orderNumber = GenerateOrderNumber();
-
-        // Create order entity
-        var order = new Order
+        try
         {
-            CustomerId = createOrderDto.CustomerId,
-            OrderNumber = orderNumber,
-            Status = OrderStatus.Created,
-            PaymentStatus = PaymentStatus.Pending,
-            ShippingStatus = ShippingStatus.NotShipped,
-            Currency = _settings.DefaultCurrency,
-            CreatedBy = currentUser,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
-        };
+            // Generate order number using configuration
+            var orderNumber = GenerateOrderNumber();
 
-        // Add order items and calculate totals
-        decimal subtotal = 0;
-        foreach (var itemDto in createOrderDto.Items)
-        {
-            var orderItem = new OrderItem
+            // Create order entity
+            var order = new Order
             {
-                ProductId = itemDto.ProductId,
-                ProductName = itemDto.ProductName,
-                UnitPrice = itemDto.UnitPrice,
-                Quantity = itemDto.Quantity,
-                TotalPrice = itemDto.UnitPrice * itemDto.Quantity,
-                DiscountAmount = 0,
-                TaxAmount = 0,
+                CustomerId = createOrderDto.CustomerId,
+                OrderNumber = orderNumber,
+                Status = OrderStatus.Created,
+                PaymentStatus = PaymentStatus.Pending,
+                ShippingStatus = ShippingStatus.NotShipped,
+                Currency = _settings.DefaultCurrency,
+                CreatedBy = currentUser,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             };
+
+            // Add order items and calculate totals
+            decimal subtotal = 0;
+            if (createOrderDto.Items != null)
+            {
+                foreach (var itemDto in createOrderDto.Items)
+            {
+                var orderItem = new OrderItem
+                {
+                    ProductId = itemDto.ProductId,
+                    ProductName = itemDto.ProductName,
+                    UnitPrice = itemDto.UnitPrice,
+                    Quantity = itemDto.Quantity,
+                    TotalPrice = itemDto.UnitPrice * itemDto.Quantity,
+                    DiscountAmount = 0,
+                    TaxAmount = 0,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+                
+                order.Items.Add(orderItem);
+                subtotal += orderItem.TotalPrice;
+            }
+            }
+
+            // Set addresses
+            order.ShippingAddress = new Address
+            {
+                AddressLine1 = createOrderDto.ShippingAddress.AddressLine1,
+                AddressLine2 = createOrderDto.ShippingAddress.AddressLine2,
+                City = createOrderDto.ShippingAddress.City,
+                State = createOrderDto.ShippingAddress.State,
+                ZipCode = createOrderDto.ShippingAddress.ZipCode,
+                Country = createOrderDto.ShippingAddress.Country
+            };
+
+            order.BillingAddress = new Address
+            {
+                AddressLine1 = createOrderDto.BillingAddress.AddressLine1,
+                AddressLine2 = createOrderDto.BillingAddress.AddressLine2,
+                City = createOrderDto.BillingAddress.City,
+                State = createOrderDto.BillingAddress.State,
+                ZipCode = createOrderDto.BillingAddress.ZipCode,
+                Country = createOrderDto.BillingAddress.Country
+            };
+
+            // Calculate order totals using configuration
+            order.Subtotal = subtotal;
+            order.TaxAmount = subtotal * (decimal)_settings.TaxRate;
+            order.ShippingCost = subtotal > (decimal)_settings.FreeShippingThreshold ? 0 : (decimal)_settings.DefaultShippingCost;
+            order.DiscountAmount = 0;
+            order.TotalAmount = order.Subtotal + order.TaxAmount + order.ShippingCost - order.DiscountAmount;
+
+            // Save to database
+            var createdOrder = await _orderRepository.CreateOrderAsync(order);
             
-            order.Items.Add(orderItem);
-            subtotal += orderItem.TotalPrice;
-        }
+            _logger.OperationComplete("CREATE_ORDER", stopwatch, currentCorrelationId, new {
+                orderId = createdOrder.Id,
+                orderNumber = createdOrder.OrderNumber,
+                totalAmount = createdOrder.TotalAmount,
+                itemCount = createdOrder.Items.Count
+            });
 
-        // Set addresses
-        order.ShippingAddress = new Address
-        {
-            AddressLine1 = createOrderDto.ShippingAddress.AddressLine1,
-            AddressLine2 = createOrderDto.ShippingAddress.AddressLine2,
-            City = createOrderDto.ShippingAddress.City,
-            State = createOrderDto.ShippingAddress.State,
-            ZipCode = createOrderDto.ShippingAddress.ZipCode,
-            Country = createOrderDto.ShippingAddress.Country
-        };
+            _logger.Business("ORDER_CREATED", currentCorrelationId, new {
+                orderId = createdOrder.Id,
+                orderNumber = createdOrder.OrderNumber,
+                customerId = createdOrder.CustomerId,
+                totalAmount = createdOrder.TotalAmount
+            });
 
-        order.BillingAddress = new Address
-        {
-            AddressLine1 = createOrderDto.BillingAddress.AddressLine1,
-            AddressLine2 = createOrderDto.BillingAddress.AddressLine2,
-            City = createOrderDto.BillingAddress.City,
-            State = createOrderDto.BillingAddress.State,
-            ZipCode = createOrderDto.BillingAddress.ZipCode,
-            Country = createOrderDto.BillingAddress.Country
-        };
+            // Publish order created event for loose coupling
+            try
+            {
+                var orderCreatedEvent = MapToOrderCreatedEvent(createdOrder, currentCorrelationId);
+                await _messagePublisher.PublishAsync(_messageBrokerSettings.Topics.OrderCreated, orderCreatedEvent);
+                
+                _logger.Info("Published OrderCreated event", currentCorrelationId, new {
+                    orderNumber = createdOrder.OrderNumber,
+                    eventType = "ORDER_CREATED_EVENT_PUBLISHED"
+                });
+            }
+            catch (Exception eventEx)
+            {
+                // Log error but don't fail the order creation
+                _logger.Error("Failed to publish OrderCreated event", currentCorrelationId, new {
+                    orderNumber = createdOrder.OrderNumber,
+                    error = eventEx
+                });
+            }
 
-        // Calculate order totals using configuration
-        order.Subtotal = subtotal;
-        order.TaxAmount = subtotal * (decimal)_settings.TaxRate;
-        order.ShippingCost = subtotal > (decimal)_settings.FreeShippingThreshold ? 0 : (decimal)_settings.DefaultShippingCost;
-        order.DiscountAmount = 0;
-        order.TotalAmount = order.Subtotal + order.TaxAmount + order.ShippingCost - order.DiscountAmount;
-
-        // Save to database
-        var createdOrder = await _orderRepository.CreateOrderAsync(order);
-        
-        _logger.LogInformation("Created order: {OrderNumber} with total: {Total:C}", 
-            createdOrder.OrderNumber, createdOrder.TotalAmount);
-
-        // Publish order created event for loose coupling
-        try
-        {
-            var orderCreatedEvent = MapToOrderCreatedEvent(createdOrder, currentCorrelationId);
-            await _messagePublisher.PublishAsync(_messageBrokerSettings.Topics.OrderCreated, orderCreatedEvent);
-            
-            _logger.LogInformation("Published OrderCreated event for order: {OrderNumber} [CorrelationId: {CorrelationId}]", 
-                createdOrder.OrderNumber, currentCorrelationId);
+            return MapToOrderResponseDto(createdOrder);
         }
         catch (Exception ex)
         {
-            // Log error but don't fail the order creation
-            _logger.LogError(ex, "Failed to publish OrderCreated event for order: {OrderNumber}. Order was created successfully.", 
-                createdOrder.OrderNumber);
+            _logger.OperationFailed("CREATE_ORDER", stopwatch, ex, currentCorrelationId, new {
+                customerId = createOrderDto.CustomerId
+            });
+            throw;
         }
-
-        return MapToOrderResponseDto(createdOrder);
     }
 
     /// <summary>
@@ -194,27 +278,57 @@ public class OrderService : IOrderService
     public async Task<OrderResponseDto?> UpdateOrderStatusAsync(Guid id, UpdateOrderStatusDto updateStatusDto)
     {
         var currentUser = _currentUserService.GetUserName() ?? _currentUserService.GetUserId() ?? "System";
-        
-        _logger.LogInformation("Updating status for order {OrderId} to {Status} by user: {UpdatedBy}", 
-            id, updateStatusDto.Status, currentUser);
+        var stopwatch = _logger.OperationStart("UPDATE_ORDER_STATUS", null, new {
+            operation = "UPDATE_ORDER_STATUS",
+            orderId = id,
+            newStatus = updateStatusDto.Status,
+            updatedBy = currentUser
+        });
 
-        var order = await _orderRepository.GetOrderByIdAsync(id);
-        if (order == null)
+        try
         {
-            _logger.LogWarning("Order with ID {OrderId} not found", id);
-            return null;
+            var order = await _orderRepository.GetOrderByIdAsync(id);
+            if (order == null)
+            {
+                _logger.Warn($"Order with ID {id} not found", null, new {
+                    orderId = id,
+                    operation = "UPDATE_ORDER_STATUS"
+                });
+                return null;
+            }
+
+            var oldStatus = order.Status;
+            order.Status = updateStatusDto.Status;
+            order.UpdatedBy = currentUser;
+            order.UpdatedAt = DateTime.UtcNow;
+
+            var updatedOrder = await _orderRepository.UpdateOrderAsync(order);
+
+            _logger.OperationComplete("UPDATE_ORDER_STATUS", stopwatch, null, new {
+                orderId = id,
+                orderNumber = updatedOrder.OrderNumber,
+                oldStatus = oldStatus,
+                newStatus = updatedOrder.Status,
+                updatedBy = currentUser
+            });
+
+            _logger.Business("ORDER_STATUS_UPDATED", null, new {
+                orderId = id,
+                orderNumber = updatedOrder.OrderNumber,
+                oldStatus = oldStatus,
+                newStatus = updatedOrder.Status
+            });
+
+            return MapToOrderResponseDto(updatedOrder);
         }
-
-        order.Status = updateStatusDto.Status;
-        order.UpdatedBy = currentUser;
-        order.UpdatedAt = DateTime.UtcNow;
-
-        var updatedOrder = await _orderRepository.UpdateOrderAsync(order);
-        
-        _logger.LogInformation("Updated order {OrderNumber} status to {Status}", 
-            updatedOrder.OrderNumber, updateStatusDto.Status);
-
-        return MapToOrderResponseDto(updatedOrder);
+        catch (Exception ex)
+        {
+            _logger.OperationFailed("UPDATE_ORDER_STATUS", stopwatch, ex, null, new {
+                orderId = id,
+                newStatus = updateStatusDto.Status
+            });
+            throw;
+        }
     }
 
     /// <summary>
@@ -222,13 +336,30 @@ public class OrderService : IOrderService
     /// </summary>
     public async Task<IEnumerable<OrderResponseDto>> GetOrdersByStatusAsync(OrderStatus status)
     {
-        _logger.LogInformation("Fetching orders with status: {Status}", status);
+        var stopwatch = _logger.OperationStart("GET_ORDERS_BY_STATUS", null, new {
+            operation = "GET_ORDERS_BY_STATUS",
+            status = status
+        });
         
-        var orders = await _orderRepository.GetOrdersByStatusAsync(status);
-        var orderDtos = orders.Select(MapToOrderResponseDto).ToList();
-        
-        _logger.LogInformation("Retrieved {Count} orders with status {Status}", orderDtos.Count, status);
-        return orderDtos;
+        try
+        {
+            var orders = await _orderRepository.GetOrdersByStatusAsync(status);
+            var orderDtos = orders.Select(MapToOrderResponseDto).ToList();
+            
+            _logger.OperationComplete("GET_ORDERS_BY_STATUS", stopwatch, null, new {
+                status = status,
+                orderCount = orderDtos.Count
+            });
+            
+            return orderDtos;
+        }
+        catch (Exception ex)
+        {
+            _logger.OperationFailed("GET_ORDERS_BY_STATUS", stopwatch, ex, null, new {
+                status = status
+            });
+            throw;
+        }
     }
 
     /// <summary>
@@ -236,20 +367,43 @@ public class OrderService : IOrderService
     /// </summary>
     public async Task<bool> DeleteOrderAsync(Guid id)
     {
-        _logger.LogInformation("Deleting order: {OrderId}", id);
+        var stopwatch = _logger.OperationStart("DELETE_ORDER", null, new {
+            operation = "DELETE_ORDER",
+            orderId = id
+        });
         
-        var result = await _orderRepository.DeleteOrderAsync(id);
-        
-        if (result)
+        try
         {
-            _logger.LogInformation("Successfully deleted order: {OrderId}", id);
+            var result = await _orderRepository.DeleteOrderAsync(id);
+            
+            if (result)
+            {
+                _logger.OperationComplete("DELETE_ORDER", stopwatch, null, new {
+                    orderId = id,
+                    deleted = true
+                });
+                
+                _logger.Business("ORDER_DELETED", null, new {
+                    orderId = id
+                });
+            }
+            else
+            {
+                _logger.Warn($"Failed to delete order: {id}", null, new {
+                    orderId = id,
+                    operation = "DELETE_ORDER"
+                });
+            }
+            
+            return result;
         }
-        else
+        catch (Exception ex)
         {
-            _logger.LogWarning("Failed to delete order: {OrderId}", id);
+            _logger.OperationFailed("DELETE_ORDER", stopwatch, ex, null, new {
+                orderId = id
+            });
+            throw;
         }
-        
-        return result;
     }
 
     /// <summary>
@@ -257,16 +411,38 @@ public class OrderService : IOrderService
     /// </summary>
     public async Task<PagedResponseDto<OrderResponseDto>> GetOrdersPagedAsync(OrderQueryDto query)
     {
-        _logger.LogInformation("Fetching paged orders - Page: {Page}, PageSize: {PageSize}, Status: {Status}, CustomerId: {CustomerId}", 
-            query.Page, query.PageSize, query.Status, query.CustomerId);
+        var stopwatch = _logger.OperationStart("GET_ORDERS_PAGED", null, new {
+            operation = "GET_ORDERS_PAGED",
+            page = query.Page,
+            pageSize = query.PageSize,
+            status = query.Status,
+            customerId = query.CustomerId
+        });
+        
+        try
+        {
+            var (orders, totalCount) = await _orderRepository.GetOrdersPagedAsync(query);
+            var orderDtos = orders.Select(MapToOrderResponseDto).ToList();
 
-        var (orders, totalCount) = await _orderRepository.GetOrdersPagedAsync(query);
-        var orderDtos = orders.Select(MapToOrderResponseDto).ToList();
+            _logger.OperationComplete("GET_ORDERS_PAGED", stopwatch, null, new {
+                page = query.Page,
+                pageSize = query.PageSize,
+                returnedCount = orderDtos.Count,
+                totalCount = totalCount
+            });
 
-        _logger.LogInformation("Retrieved page {Page} with {Count} orders out of {Total} total", 
-            query.Page, orderDtos.Count, totalCount);
-
-        return PagedResponseDto<OrderResponseDto>.Create(orderDtos, query.Page, query.PageSize, totalCount);
+            return PagedResponseDto<OrderResponseDto>.Create(orderDtos, query.Page, query.PageSize, totalCount);
+        }
+        catch (Exception ex)
+        {
+            _logger.OperationFailed("GET_ORDERS_PAGED", stopwatch, ex, null, new {
+                page = query.Page,
+                pageSize = query.PageSize,
+                status = query.Status,
+                customerId = query.CustomerId
+            });
+            throw;
+        }
     }
 
     /// <summary>
@@ -274,16 +450,37 @@ public class OrderService : IOrderService
     /// </summary>
     public async Task<PagedResponseDto<OrderResponseDto>> GetOrdersByCustomerIdPagedAsync(string customerId, PagedRequestDto pageRequest)
     {
-        _logger.LogInformation("Fetching paged orders for customer: {CustomerId} - Page: {Page}, PageSize: {PageSize}", 
-            customerId, pageRequest.Page, pageRequest.PageSize);
+        var stopwatch = _logger.OperationStart("GET_ORDERS_BY_CUSTOMER_PAGED", null, new {
+            operation = "GET_ORDERS_BY_CUSTOMER_PAGED",
+            customerId = customerId,
+            page = pageRequest.Page,
+            pageSize = pageRequest.PageSize
+        });
+        
+        try
+        {
+            var (orders, totalCount) = await _orderRepository.GetOrdersByCustomerIdPagedAsync(customerId, pageRequest);
+            var orderDtos = orders.Select(MapToOrderResponseDto).ToList();
 
-        var (orders, totalCount) = await _orderRepository.GetOrdersByCustomerIdPagedAsync(customerId, pageRequest);
-        var orderDtos = orders.Select(MapToOrderResponseDto).ToList();
+            _logger.OperationComplete("GET_ORDERS_BY_CUSTOMER_PAGED", stopwatch, null, new {
+                customerId = customerId,
+                page = pageRequest.Page,
+                pageSize = pageRequest.PageSize,
+                returnedCount = orderDtos.Count,
+                totalCount = totalCount
+            });
 
-        _logger.LogInformation("Retrieved page {Page} with {Count} orders for customer {CustomerId} out of {Total} total", 
-            pageRequest.Page, orderDtos.Count, customerId, totalCount);
-
-        return PagedResponseDto<OrderResponseDto>.Create(orderDtos, pageRequest.Page, pageRequest.PageSize, totalCount);
+            return PagedResponseDto<OrderResponseDto>.Create(orderDtos, pageRequest.Page, pageRequest.PageSize, totalCount);
+        }
+        catch (Exception ex)
+        {
+            _logger.OperationFailed("GET_ORDERS_BY_CUSTOMER_PAGED", stopwatch, ex, null, new {
+                customerId = customerId,
+                page = pageRequest.Page,
+                pageSize = pageRequest.PageSize
+            });
+            throw;
+        }
     }
 
     /// <summary>

@@ -1,17 +1,20 @@
-using Serilog.Context;
+using OrderService.Observability.Logging;
+using System.Diagnostics;
 
 namespace OrderService.Middlewares;
 
 /// <summary>
-/// Middleware to handle correlation IDs for distributed tracing
+/// Middleware to handle correlation IDs for distributed tracing and enhanced logging
 /// </summary>
 public class CorrelationIdMiddleware
 {
     private readonly RequestDelegate _next;
-    private readonly ILogger<CorrelationIdMiddleware> _logger;
+    private readonly EnhancedLogger _logger;
     private const string CorrelationIdHeader = "X-Correlation-ID";
+    private const string TraceIdHeader = "X-Trace-ID";
+    private const string SpanIdHeader = "X-Span-ID";
 
-    public CorrelationIdMiddleware(RequestDelegate next, ILogger<CorrelationIdMiddleware> logger)
+    public CorrelationIdMiddleware(RequestDelegate next, EnhancedLogger logger)
     {
         _next = next;
         _logger = logger;
@@ -28,13 +31,45 @@ public class CorrelationIdMiddleware
         // Add to response headers
         context.Response.Headers[CorrelationIdHeader] = correlationId;
 
-        // Add to logging context
-        using (LogContext.PushProperty("CorrelationId", correlationId))
+        // Get current tracing context
+        var activity = Activity.Current;
+        if (activity != null)
         {
-            _logger.LogInformation("Processing request {Method} {Path} with correlation ID: {CorrelationId}",
-                context.Request.Method, context.Request.Path, correlationId);
+            context.Response.Headers[TraceIdHeader] = activity.TraceId.ToString();
+            context.Response.Headers[SpanIdHeader] = activity.SpanId.ToString();
+        }
 
+        // Log request processing start
+        var stopwatch = _logger.OperationStart("PROCESS_REQUEST", correlationId, new 
+        { 
+            method = context.Request.Method,
+            path = context.Request.Path.Value,
+            userAgent = context.Request.Headers.UserAgent.ToString(),
+            remoteIp = GetRemoteIpAddress(context)
+        });
+
+        try
+        {
             await _next(context);
+
+            // Log successful completion
+            _logger.OperationComplete("PROCESS_REQUEST", stopwatch, correlationId, new 
+            { 
+                method = context.Request.Method,
+                path = context.Request.Path.Value,
+                statusCode = context.Response.StatusCode
+            });
+        }
+        catch (Exception ex)
+        {
+            // Log failed request
+            _logger.OperationFailed("PROCESS_REQUEST", stopwatch, ex, correlationId, new 
+            { 
+                method = context.Request.Method,
+                path = context.Request.Path.Value,
+                statusCode = context.Response.StatusCode
+            });
+            throw;
         }
     }
 
@@ -49,6 +84,13 @@ public class CorrelationIdMiddleware
 
         // Generate new correlation ID
         return Guid.NewGuid().ToString();
+    }
+
+    private static string? GetRemoteIpAddress(HttpContext context)
+    {
+        return context.Connection.RemoteIpAddress?.ToString() ??
+               context.Request.Headers["X-Forwarded-For"].FirstOrDefault() ??
+               context.Request.Headers["X-Real-IP"].FirstOrDefault();
     }
 }
 

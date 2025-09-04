@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Authorization;
 using OrderService.Models.DTOs;
 using OrderService.Models.Enums;
 using OrderService.Services;
+using OrderService.Observability.Logging;
+using System.Diagnostics;
 
 namespace OrderService.Controllers;
 
@@ -12,9 +14,9 @@ namespace OrderService.Controllers;
 public class OrdersController : ControllerBase
 {
     private readonly IOrderService _orderService;
-    private readonly ILogger<OrdersController> _logger;
+    private readonly EnhancedLogger _logger;
 
-    public OrdersController(IOrderService orderService, ILogger<OrdersController> logger)
+    public OrdersController(IOrderService orderService, EnhancedLogger logger)
     {
         _orderService = orderService;
         _logger = logger;
@@ -28,14 +30,28 @@ public class OrdersController : ControllerBase
     [Authorize(Policy = "AdminOnly")]
     public async Task<ActionResult<IEnumerable<OrderResponseDto>>> GetOrders()
     {
+        var correlationId = GetCorrelationId();
+        var stopwatch = _logger.OperationStart("GET_ALL_ORDERS", correlationId, new { 
+            operation = "GET_ALL_ORDERS",
+            endpoint = "GET /api/orders"
+        });
+
         try
         {
             var orders = await _orderService.GetAllOrdersAsync();
+            
+            _logger.OperationComplete("GET_ALL_ORDERS", stopwatch, correlationId, new {
+                orderCount = orders.Count(),
+                endpoint = "GET /api/orders"
+            });
+
             return Ok(orders);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching orders");
+            _logger.OperationFailed("GET_ALL_ORDERS", stopwatch, ex, correlationId, new {
+                endpoint = "GET /api/orders"
+            });
             return StatusCode(500, "An error occurred while fetching orders");
         }
     }
@@ -48,14 +64,34 @@ public class OrdersController : ControllerBase
     [Authorize(Policy = "AdminOnly")]
     public async Task<ActionResult<PagedResponseDto<OrderResponseDto>>> GetOrdersPaged([FromQuery] OrderQueryDto query)
     {
+        var correlationId = GetCorrelationId();
+        var stopwatch = _logger.OperationStart("GET_ORDERS_PAGED", correlationId, new { 
+            operation = "GET_ORDERS_PAGED",
+            endpoint = "GET /api/orders/paged",
+            page = query.Page,
+            pageSize = query.PageSize
+        });
+
         try
         {
             var pagedOrders = await _orderService.GetOrdersPagedAsync(query);
+            
+            _logger.OperationComplete("GET_ORDERS_PAGED", stopwatch, correlationId, new {
+                totalItems = pagedOrders.TotalItems,
+                page = pagedOrders.Page,
+                pageSize = pagedOrders.PageSize,
+                endpoint = "GET /api/orders/paged"
+            });
+
             return Ok(pagedOrders);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching paged orders");
+            _logger.OperationFailed("GET_ORDERS_PAGED", stopwatch, ex, correlationId, new {
+                endpoint = "GET /api/orders/paged",
+                page = query.Page,
+                pageSize = query.PageSize
+            });
             return StatusCode(500, "An error occurred while fetching orders");
         }
     }
@@ -68,29 +104,57 @@ public class OrdersController : ControllerBase
     [Authorize(Policy = "CustomerOrAdmin")]
     public async Task<ActionResult<OrderResponseDto>> GetOrder(Guid id)
     {
+        var correlationId = GetCorrelationId();
+        var currentUserId = GetCurrentUserId();
+        var isAdmin = IsCurrentUserAdmin();
+        
+        var stopwatch = _logger.OperationStart("GET_ORDER", correlationId, new { 
+            operation = "GET_ORDER",
+            endpoint = "GET /api/orders/{id}",
+            orderId = id,
+            requestedBy = currentUserId
+        });
+
         try
         {
             var order = await _orderService.GetOrderByIdAsync(id);
             
             if (order == null)
             {
+                _logger.Warn($"Order with ID {id} not found", correlationId, new {
+                    orderId = id,
+                    endpoint = "GET /api/orders/{id}"
+                });
                 return NotFound($"Order with ID {id} not found");
             }
 
             // Check if customer is trying to access their own order
-            var customerIdFromToken = User.FindFirst("sub")?.Value;
-            var isAdmin = User.HasClaim("roles", "admin");
-            
-            if (!isAdmin && customerIdFromToken != order.CustomerId)
+            if (!isAdmin && currentUserId != order.CustomerId)
             {
+                _logger.Security("UNAUTHORIZED_ORDER_ACCESS_ATTEMPT", correlationId, new {
+                    orderId = id,
+                    requestedBy = currentUserId,
+                    orderOwner = order.CustomerId,
+                    endpoint = "GET /api/orders/{id}"
+                });
                 return Forbid("You can only view your own orders");
             }
+
+            _logger.OperationComplete("GET_ORDER", stopwatch, correlationId, new {
+                orderId = id,
+                orderNumber = order.OrderNumber,
+                customerId = order.CustomerId,
+                endpoint = "GET /api/orders/{id}"
+            });
 
             return Ok(order);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching order with ID: {OrderId}", id);
+            _logger.OperationFailed("GET_ORDER", stopwatch, ex, correlationId, new {
+                orderId = id,
+                endpoint = "GET /api/orders/{id}"
+            });
             return StatusCode(500, "An error occurred while fetching the order");
         }
     }
@@ -103,26 +167,51 @@ public class OrdersController : ControllerBase
     [Authorize(Policy = "CustomerOnly")]
     public async Task<ActionResult<OrderResponseDto>> CreateOrder(CreateOrderDto createOrderDto)
     {
+        var correlationId = GetCorrelationId();
+        var customerId = GetCurrentUserId();
+        var stopwatch = _logger.OperationStart("CREATE_ORDER", correlationId, new { 
+            operation = "CREATE_ORDER",
+            endpoint = "POST /api/orders",
+            customerId = customerId
+        });
+
         try
         {
-            // Get customer ID from JWT token claims
-            var customerIdFromToken = User.FindFirst("sub")?.Value;
-            
             // Ensure the customer can only create orders for themselves
-            if (customerIdFromToken != createOrderDto.CustomerId)
+            if (customerId != createOrderDto.CustomerId)
             {
+                _logger.Security("UNAUTHORIZED_ORDER_CREATION_ATTEMPT", correlationId, new {
+                    requestedCustomerId = createOrderDto.CustomerId,
+                    actualCustomerId = customerId,
+                    endpoint = "POST /api/orders"
+                });
                 return Forbid("You can only create orders for yourself");
             }
 
-            // Get correlation ID from context
-            var correlationId = HttpContext.Items["CorrelationId"]?.ToString() ?? Guid.NewGuid().ToString();
-            
             var order = await _orderService.CreateOrderAsync(createOrderDto, correlationId);
+            
+            _logger.OperationComplete("CREATE_ORDER", stopwatch, correlationId, new {
+                orderId = order.Id,
+                customerId = order.CustomerId,
+                totalAmount = order.TotalAmount,
+                endpoint = "POST /api/orders"
+            });
+
+            _logger.Business("ORDER_CREATED", correlationId, new {
+                orderId = order.Id,
+                customerId = order.CustomerId,
+                totalAmount = order.TotalAmount,
+                orderNumber = order.OrderNumber
+            });
+
             return CreatedAtAction(nameof(GetOrder), new { id = order.Id }, order);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error creating order for customer: {CustomerId}", createOrderDto.CustomerId);
+            _logger.OperationFailed("CREATE_ORDER", stopwatch, ex, correlationId, new {
+                customerId = createOrderDto.CustomerId,
+                endpoint = "POST /api/orders"
+            });
             return StatusCode(500, "An error occurred while creating the order");
         }
     }
@@ -148,7 +237,7 @@ public class OrdersController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error updating status for order: {OrderId}", id);
+            _logger.Error($"Error updating status for order: {{OrderId}} - {ex.Message}", GetCorrelationId(), new { OrderId = id, Exception = ex });
             return StatusCode(500, "An error occurred while updating the order status");
         }
     }
@@ -177,7 +266,7 @@ public class OrdersController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching orders for customer: {CustomerId}", customerId);
+            _logger.Error($"Error fetching orders for customer: {{CustomerId}} - {ex.Message}", GetCorrelationId(), new { CustomerId = customerId, Exception = ex });
             return StatusCode(500, "An error occurred while fetching orders");
         }
     }
@@ -208,7 +297,7 @@ public class OrdersController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching paged orders for customer: {CustomerId}", customerId);
+            _logger.Error($"Error fetching paged orders for customer: {{CustomerId}} - {ex.Message}", GetCorrelationId(), new { CustomerId = customerId, Exception = ex });
             return StatusCode(500, "An error occurred while fetching orders");
         }
     }
@@ -228,7 +317,7 @@ public class OrdersController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error fetching orders with status: {Status}", status);
+            _logger.Error($"Error fetching orders with status: {{Status}} - {ex.Message}", GetCorrelationId(), new { Status = status, Exception = ex });
             return StatusCode(500, "An error occurred while fetching orders");
         }
     }
@@ -254,8 +343,32 @@ public class OrdersController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error deleting order: {OrderId}", id);
+            _logger.Error($"Error deleting order: {{OrderId}} - {ex.Message}", GetCorrelationId(), new { OrderId = id, Exception = ex });
             return StatusCode(500, "An error occurred while deleting the order");
         }
+    }
+    
+    /// <summary>
+    /// Helper method to get correlation ID from context
+    /// </summary>
+    private string GetCorrelationId()
+    {
+        return HttpContext.Items["CorrelationId"]?.ToString() ?? Guid.NewGuid().ToString();
+    }
+    
+    /// <summary>
+    /// Helper method to get current user ID from JWT token
+    /// </summary>
+    private string? GetCurrentUserId()
+    {
+        return User.FindFirst("sub")?.Value;
+    }
+    
+    /// <summary>
+    /// Helper method to check if current user is admin
+    /// </summary>
+    private bool IsCurrentUserAdmin()
+    {
+        return User.HasClaim("roles", "admin");
     }
 }

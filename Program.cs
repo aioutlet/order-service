@@ -11,8 +11,12 @@ using OrderService.Services;
 using OrderService.Services.Messaging;
 using OrderService.Middlewares;
 using OrderService.Validators;
+using OrderService.Observability;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Add observability (logging and tracing) - this should be first
+builder.AddObservability();
 
 // Add configuration settings
 builder.Services.Configure<OrderServiceSettings>(
