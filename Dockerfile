@@ -24,18 +24,18 @@ FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
 # Copy project file and restore dependencies (better caching)
-COPY ["OrderService.csproj", "./"]
-RUN dotnet restore "OrderService.csproj"
+COPY ["OrderService/OrderService.csproj", "OrderService/"]
+RUN dotnet restore "OrderService/OrderService.csproj"
 
 # Copy source code and build
 COPY . .
-RUN dotnet build "OrderService.csproj" -c Release -o /app/build
+RUN dotnet build "OrderService/OrderService.csproj" -c Release -o /app/build
 
 # -----------------------------------------------------------------------------
 # Publish stage - Publish the application
 # -----------------------------------------------------------------------------
 FROM build AS publish
-RUN dotnet publish "OrderService.csproj" -c Release -o /app/publish /p:UseAppHost=false
+RUN dotnet publish "OrderService/OrderService.csproj" -c Release -o /app/publish /p:UseAppHost=false
 
 # -----------------------------------------------------------------------------
 # Development stage - For local development
@@ -50,8 +50,8 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy project file and restore dependencies
-COPY ["OrderService.csproj", "./"]
-RUN dotnet restore "OrderService.csproj"
+COPY ["OrderService/OrderService.csproj", "OrderService/"]
+RUN dotnet restore "OrderService/OrderService.csproj"
 
 # Copy source code
 COPY . .
@@ -70,7 +70,7 @@ EXPOSE 80
 EXPOSE 443
 
 # Run in development mode with hot reload
-ENTRYPOINT ["dotnet", "watch", "run", "--urls", "http://0.0.0.0:80"]
+ENTRYPOINT ["dotnet", "watch", "run", "--project", "OrderService/OrderService.csproj", "--urls", "http://0.0.0.0:80"]
 
 # -----------------------------------------------------------------------------
 # Production stage - Optimized for production deployment
