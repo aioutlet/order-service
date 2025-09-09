@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
@@ -28,6 +29,9 @@ builder.Services.Configure<JwtSettings>(
 
 // Add services to the container.
 builder.Services.AddControllers();
+
+// Add rate limiting
+builder.Services.AddRateLimitingServices(builder.Configuration);
 
 // Add FluentValidation
 builder.Services.AddValidatorsFromAssemblyContaining<CreateOrderDtoValidator>();
@@ -127,6 +131,9 @@ var app = builder.Build();
 
 // Add correlation ID middleware (before error handling)
 app.UseCorrelationId();
+
+// Add rate limiting (after correlation ID, before authentication)
+app.UseOrderServiceRateLimiting(builder.Configuration);
 
 // Add global error handling middleware
 app.UseErrorHandling();
