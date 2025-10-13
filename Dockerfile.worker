@@ -1,0 +1,41 @@
+# Build stage
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+WORKDIR /src
+
+# Copy solution and project files
+COPY OrderService.sln .
+COPY OrderService.Core/OrderService.Core.csproj OrderService.Core/
+COPY OrderService.Worker/OrderService.Worker.csproj OrderService.Worker/
+
+# Restore dependencies
+RUN dotnet restore OrderService.Worker/OrderService.Worker.csproj
+
+# Copy source code
+COPY OrderService.Core/ OrderService.Core/
+COPY OrderService.Worker/ OrderService.Worker/
+
+# Build
+WORKDIR /src/OrderService.Worker
+RUN dotnet build OrderService.Worker.csproj -c Release -o /app/build
+
+# Publish stage
+FROM build AS publish
+RUN dotnet publish OrderService.Worker.csproj -c Release -o /app/publish /p:UseAppHost=false
+
+# Runtime stage
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
+WORKDIR /app
+
+# Create non-root user
+RUN adduser --disabled-password --gecos '' appuser && chown -R appuser /app
+USER appuser
+
+# Copy published app
+COPY --from=publish /app/publish .
+
+# Set environment variables
+ENV ASPNETCORE_ENVIRONMENT=Production
+
+# No ports exposed for worker (background service)
+
+ENTRYPOINT ["dotnet", "OrderService.Worker.dll"]

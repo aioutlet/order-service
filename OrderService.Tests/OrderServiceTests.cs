@@ -4,14 +4,14 @@ using Microsoft.Extensions.Configuration;
 using Moq;
 using Xunit;
 using FluentAssertions;
-using OrderService.Services;
-using OrderService.Repositories;
-using OrderService.Configuration;
-using OrderService.Models.DTOs;
-using OrderService.Models.Entities;
-using OrderService.Models.Enums;
-using OrderService.Services.Messaging;
-using OrderService.Observability.Logging;
+using OrderService.Core.Services;
+using OrderService.Core.Repositories;
+using OrderService.Core.Configuration;
+using OrderService.Core.Models.DTOs;
+using OrderService.Core.Models.Entities;
+using OrderService.Core.Models.Enums;
+using OrderService.Core.Services.Messaging;
+using OrderService.Core.Observability.Logging;
 
 namespace OrderService.Tests;
 
@@ -23,7 +23,7 @@ public class OrderServiceTests
     private readonly Mock<IMessagePublisher> _mockMessagePublisher;
     private readonly Mock<IOptions<MessageBrokerSettings>> _mockMessageBrokerSettings;
     private readonly Mock<ICurrentUserService> _mockCurrentUserService;
-    private readonly OrderService.Services.OrderService _orderService;
+    private readonly OrderService.Core.Services.OrderService _orderService;
     private readonly OrderServiceSettings _orderServiceSettings;
     private readonly MessageBrokerSettings _messageBrokerSettings;
 
@@ -89,7 +89,7 @@ public class OrderServiceTests
         _mockCurrentUserService.Setup(x => x.GetUserName()).Returns("TestUser");
         _mockCurrentUserService.Setup(x => x.GetUserId()).Returns("user-123");
 
-        _orderService = new OrderService.Services.OrderService(
+        _orderService = new OrderService.Core.Services.OrderService(
             _mockOrderRepository.Object,
             _logger,
             _mockOrderServiceSettings.Object,
