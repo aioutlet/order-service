@@ -20,22 +20,16 @@ public static class JwtAuthenticationExtensions
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        // Add JWT settings configuration
-        services.Configure<JwtSettings>(
-            configuration.GetSection(JwtSettings.SectionName));
-
         // Add JWT Authentication
         services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             .AddJwtBearer(options =>
             {
                 options.TokenValidationParameters = new TokenValidationParameters
                 {
-                    ValidateIssuer = true,
-                    ValidateAudience = true,
-                    ValidateLifetime = true,
-                    ValidateIssuerSigningKey = true,
-                    ValidIssuer = configuration["Jwt:Issuer"],
-                    ValidAudience = configuration["Jwt:Audience"],
+                    ValidateIssuer = false,           // Auth-service doesn't set issuer in tokens
+                    ValidateAudience = false,         // Auth-service doesn't set audience in tokens
+                    ValidateLifetime = true,          // Validate token expiration
+                    ValidateIssuerSigningKey = true,  // Validate signature with secret key
                     IssuerSigningKey = new SymmetricSecurityKey(
                         Encoding.UTF8.GetBytes(configuration["Jwt:Key"] 
                             ?? throw new InvalidOperationException("JWT Key not configured")))
