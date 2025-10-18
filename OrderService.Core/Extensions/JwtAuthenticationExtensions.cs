@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
@@ -64,5 +65,20 @@ public static class JwtAuthenticationExtensions
         });
 
         return services;
+    }
+
+    /// <summary>
+    /// Adds authentication and authorization middleware to the pipeline
+    /// Must be called after UseCorrelationId and before MapControllers
+    /// </summary>
+    public static IApplicationBuilder UseOrderServiceAuthentication(this IApplicationBuilder app)
+    {
+        // Add Authentication middleware (validates JWT tokens)
+        app.UseAuthentication();
+        
+        // Add Authorization middleware (enforces policies)
+        app.UseAuthorization();
+        
+        return app;
     }
 }

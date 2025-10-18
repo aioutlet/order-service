@@ -8,6 +8,7 @@ using OrderService.Core.Repositories;
 using OrderService.Core.Services;
 using OrderService.Core.Services.Messaging;
 using OrderService.Core.Extensions;
+using OrderService.Core.Middlewares;
 using OrderService.Api.Middlewares;
 using OrderService.Core.Validators;
 using OrderService.Api.Observability;
@@ -110,8 +111,7 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 
 // Add Authentication and Authorization middleware
-app.UseAuthentication();
-app.UseAuthorization();
+app.UseOrderServiceAuthentication();
 
 app.MapControllers();
 

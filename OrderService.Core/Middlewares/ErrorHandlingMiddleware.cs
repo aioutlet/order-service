@@ -1,8 +1,10 @@
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging;
 using System.Net;
 using System.Text.Json;
 using FluentValidation;
 
-namespace OrderService.Api.Middlewares;
+namespace OrderService.Core.Middlewares;
 
 /// <summary>
 /// Global error handling middleware for centralized error handling and response formatting
@@ -116,16 +118,5 @@ public class ErrorHandlingMiddleware
             errors = errors,
             timestamp = DateTime.UtcNow
         };
-    }
-}
-
-/// <summary>
-/// Extension method to register the error handling middleware
-/// </summary>
-public static class ErrorHandlingMiddlewareExtensions
-{
-    public static IApplicationBuilder UseErrorHandling(this IApplicationBuilder app)
-    {
-        return app.UseMiddleware<ErrorHandlingMiddleware>();
     }
 }

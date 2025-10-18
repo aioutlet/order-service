@@ -1,7 +1,8 @@
+using Microsoft.AspNetCore.Http;
 using OrderService.Core.Observability.Logging;
 using System.Diagnostics;
 
-namespace OrderService.Api.Middlewares;
+namespace OrderService.Core.Middlewares;
 
 /// <summary>
 /// Middleware to handle correlation IDs for distributed tracing and enhanced logging
@@ -91,16 +92,5 @@ public class CorrelationIdMiddleware
         return context.Connection.RemoteIpAddress?.ToString() ??
                context.Request.Headers["X-Forwarded-For"].FirstOrDefault() ??
                context.Request.Headers["X-Real-IP"].FirstOrDefault();
-    }
-}
-
-/// <summary>
-/// Extension method to add correlation ID middleware
-/// </summary>
-public static class CorrelationIdMiddlewareExtensions
-{
-    public static IApplicationBuilder UseCorrelationId(this IApplicationBuilder builder)
-    {
-        return builder.UseMiddleware<CorrelationIdMiddleware>();
     }
 }
