@@ -6,6 +6,7 @@ using OrderService.Core.Configuration;
 using OrderService.Core.Repositories;
 using OrderService.Core.Services;
 using OrderService.Core.Services.Messaging;
+using OrderService.Core.Services.Messaging.Publishers;
 using OrderService.Core.Extensions;
 using OrderService.Core.Middlewares;
 using OrderService.Core.Validators;

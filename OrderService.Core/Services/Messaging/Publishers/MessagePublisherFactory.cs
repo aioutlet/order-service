@@ -3,7 +3,7 @@ using OrderService.Core.Configuration;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace OrderService.Core.Services.Messaging;
+namespace OrderService.Core.Services.Messaging.Publishers;
 
 /// <summary>
 /// Factory for creating message publishers based on configuration

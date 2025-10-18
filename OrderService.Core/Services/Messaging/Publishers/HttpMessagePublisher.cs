@@ -4,11 +4,16 @@ using Microsoft.Extensions.Options;
 using System.Text;
 using System.Text.Json;
 
-namespace OrderService.Core.Services.Messaging;
+namespace OrderService.Core.Services.Messaging.Publishers;
 
 /// <summary>
 /// HTTP-based message publisher that sends events to message-broker-service
 /// Used by API process to publish events without direct RabbitMQ connection
+/// 
+/// Configuration:
+/// - MESSAGE_BROKER_SERVICE_URL environment variable (default: http://localhost:4000)
+/// - MESSAGE_BROKER_API_KEY environment variable (optional)
+/// - MessageBroker:Topics section in appsettings.json for routing keys
 /// </summary>
 public class HttpMessagePublisher : IMessagePublisher
 {

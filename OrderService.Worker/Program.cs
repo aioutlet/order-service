@@ -34,8 +34,13 @@ builder.Services.AddScoped<IOrderService, OrderService.Core.Services.OrderServic
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 
-// Register RabbitMQ connection service
-builder.Services.AddSingleton<IRabbitMQConnectionService, RabbitMQConnectionService>();
+// Register message broker adapter factory and adapter
+builder.Services.AddSingleton<MessageBrokerAdapterFactory>();
+builder.Services.AddSingleton<IMessageBrokerAdapter>(sp =>
+{
+    var factory = sp.GetRequiredService<MessageBrokerAdapterFactory>();
+    return factory.CreateAdapter();
+});
 
 // Register event handlers
 builder.Services.AddScoped<IEventHandler<OrderService.Worker.Events.OrderCompletedEvent>, OrderCompletedHandler>();

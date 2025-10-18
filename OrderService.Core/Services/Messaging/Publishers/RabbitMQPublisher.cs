@@ -5,7 +5,7 @@ using System.Text.Json;
 using OrderService.Core.Configuration;
 using Microsoft.Extensions.Options;
 
-namespace OrderService.Core.Services.Messaging;
+namespace OrderService.Core.Services.Messaging.Publishers;
 
 /// <summary>
 /// RabbitMQ implementation of message publisher

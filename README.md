@@ -17,25 +17,49 @@ A robust, production-ready order management microservice built with ASP.NET Core
 
 ## 🏗️ Architecture
 
+### Two-Process Architecture
+
+The Order Service consists of two separate processes with different messaging patterns:
+
+**OrderService.Api** (REST API)
+
+- Publishes events via HTTP to `message-broker-service`
+- Uses environment variables: `MESSAGE_BROKER_SERVICE_URL` (default: http://localhost:4000)
+- Configuration: `MessageBroker:Topics` section in appsettings.json
+
+**OrderService.Worker** (Background Consumer)
+
+- Consumes events directly from RabbitMQ
+- Direct RabbitMQ connection for better performance when consuming
+- Configuration: `MessageBroker:RabbitMQ:ConnectionString` in appsettings.json
+
+This hybrid approach provides the best of both worlds:
+
+- API uses message-broker-service for consistent integration patterns across microservices
+- Worker uses direct RabbitMQ connection for efficient event consumption
+
 ### Project Structure
 
 ```
 OrderService/
-├── Controllers/         # API controllers
-├── Services/           # Business logic layer
-│   ├── Messaging/      # Message publisher implementations
-│   └── IOrderService   # Service interfaces
-├── Repositories/       # Data access layer
-├── Models/
-│   ├── Entities/       # Domain entities
-│   ├── DTOs/          # Data transfer objects
-│   ├── Events/        # Event contracts
-│   └── Enums/         # Enumeration types
-├── Data/              # EF Core context and configurations
-├── Configuration/     # Application settings classes
-├── Validators/        # FluentValidation validators
-├── Middlewares/       # Custom middlewares
-└── Utils/            # Utility classes
+├── OrderService.Api/        # REST API process
+├── OrderService.Worker/     # Background consumer process
+├── OrderService.Core/       # Shared business logic
+│   ├── Services/           # Business logic layer
+│   │   ├── Messaging/      # Message publisher implementations
+│   │   └── IOrderService   # Service interfaces
+│   ├── Repositories/       # Data access layer
+│   ├── Models/
+│   │   ├── Entities/       # Domain entities
+│   │   ├── DTOs/          # Data transfer objects
+│   │   ├── Events/        # Event contracts
+│   │   └── Enums/         # Enumeration types
+│   ├── Data/              # EF Core context and configurations
+│   ├── Configuration/     # Application settings classes
+│   ├── Validators/        # FluentValidation validators
+│   ├── Middlewares/       # Custom middlewares
+│   └── Extensions/        # Extension methods
+└── OrderService.Tests/    # Unit tests
 ```
 
 ### Technology Stack

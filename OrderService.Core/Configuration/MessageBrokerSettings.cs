@@ -18,6 +18,11 @@ public class MessageBrokerSettings
     public RabbitMQSettings RabbitMQ { get; set; } = new();
 
     /// <summary>
+    /// Kafka configuration
+    /// </summary>
+    public KafkaSettings Kafka { get; set; } = new();
+
+    /// <summary>
     /// Azure Service Bus configuration
     /// </summary>
     public AzureServiceBusSettings AzureServiceBus { get; set; } = new();
@@ -41,7 +46,7 @@ public class RabbitMQSettings
     /// <summary>
     /// Exchange name for order events
     /// </summary>
-    public string Exchange { get; set; } = "orders.exchange";
+    public string Exchange { get; set; } = "aioutlet.events";
 
     /// <summary>
     /// Exchange type (topic, direct, fanout)
@@ -52,6 +57,32 @@ public class RabbitMQSettings
     /// Enable publisher confirms
     /// </summary>
     public bool PublisherConfirms { get; set; } = true;
+
+    /// <summary>
+    /// Connection retry attempts
+    /// </summary>
+    public int RetryAttempts { get; set; } = 3;
+}
+
+/// <summary>
+/// Kafka specific settings
+/// </summary>
+public class KafkaSettings
+{
+    /// <summary>
+    /// Kafka broker addresses (comma-separated)
+    /// </summary>
+    public string Brokers { get; set; } = "localhost:9092";
+
+    /// <summary>
+    /// Topic name for order events
+    /// </summary>
+    public string Topic { get; set; } = "aioutlet.events";
+
+    /// <summary>
+    /// Consumer group ID
+    /// </summary>
+    public string GroupId { get; set; } = "order-service-worker";
 
     /// <summary>
     /// Connection retry attempts
