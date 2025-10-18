@@ -25,20 +25,20 @@ public class OrderService : IOrderService
 
     private readonly IOrderRepository _orderRepository;
     private readonly EnhancedLogger _logger;
-    private readonly IMessagePublisher _messagePublisher;
+    private readonly MessageBrokerServiceClient _messageBrokerClient;
     private readonly MessageBrokerSettings _messageBrokerSettings;
     private readonly ICurrentUserService _currentUserService;
 
     public OrderService(
         IOrderRepository orderRepository, 
         EnhancedLogger logger,
-        IMessagePublisher messagePublisher,
+        MessageBrokerServiceClient messageBrokerClient,
         IOptions<MessageBrokerSettings> messageBrokerSettings,
         ICurrentUserService currentUserService)
     {
         _orderRepository = orderRepository;
         _logger = logger;
-        _messagePublisher = messagePublisher;
+        _messageBrokerClient = messageBrokerClient;
         _messageBrokerSettings = messageBrokerSettings.Value;
         _currentUserService = currentUserService;
     }
@@ -249,7 +249,10 @@ public class OrderService : IOrderService
             try
             {
                 var orderCreatedEvent = MapToOrderCreatedEvent(createdOrder, currentCorrelationId);
-                await _messagePublisher.PublishAsync(_messageBrokerSettings.Topics.OrderCreated, orderCreatedEvent);
+                await _messageBrokerClient.PublishEventAsync(
+                    "aioutlet.events", 
+                    _messageBrokerSettings.Topics.OrderCreated, 
+                    orderCreatedEvent);
                 
                 _logger.Info("Published OrderCreated event", currentCorrelationId, new {
                     orderNumber = createdOrder.OrderNumber,

@@ -1,8 +1,11 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.Extensions.Options;
 using OrderService.Core.Models.DTOs;
 using OrderService.Core.Models.Enums;
+using OrderService.Core.Models.Events;
 using OrderService.Core.Services;
+using OrderService.Core.Configuration;
 using OrderService.Core.Observability.Logging;
 using System.Diagnostics;
 
@@ -15,11 +18,19 @@ public class OrdersController : ControllerBase
 {
     private readonly IOrderService _orderService;
     private readonly EnhancedLogger _logger;
+    private readonly MessageBrokerServiceClient _messageBrokerClient;
+    private readonly MessageBrokerSettings _messageBrokerSettings;
 
-    public OrdersController(IOrderService orderService, EnhancedLogger logger)
+    public OrdersController(
+        IOrderService orderService, 
+        EnhancedLogger logger,
+        MessageBrokerServiceClient messageBrokerClient,
+        IOptions<MessageBrokerSettings> messageBrokerSettings)
     {
         _orderService = orderService;
         _logger = logger;
+        _messageBrokerClient = messageBrokerClient;
+        _messageBrokerSettings = messageBrokerSettings.Value;
     }
 
     /// <summary>
@@ -224,20 +235,87 @@ public class OrdersController : ControllerBase
     [Authorize(Policy = "AdminOnly")]
     public async Task<ActionResult<OrderResponseDto>> UpdateOrderStatus(Guid id, UpdateOrderStatusDto updateStatusDto)
     {
+        var correlationId = GetCorrelationId();
+        var stopwatch = _logger.OperationStart("UPDATE_ORDER_STATUS", correlationId, new { 
+            operation = "UPDATE_ORDER_STATUS",
+            endpoint = "PUT /api/orders/{id}/status",
+            orderId = id,
+            newStatus = updateStatusDto.Status
+        });
+
         try
         {
             var order = await _orderService.UpdateOrderStatusAsync(id, updateStatusDto);
             
             if (order == null)
             {
+                _logger.Warn($"Order with ID {id} not found", correlationId, new {
+                    orderId = id,
+                    endpoint = "PUT /api/orders/{id}/status"
+                });
                 return NotFound($"Order with ID {id} not found");
             }
+
+            // Publish appropriate event based on status change
+            try
+            {
+                string routingKey = updateStatusDto.Status switch
+                {
+                    OrderStatus.Cancelled => _messageBrokerSettings.Topics.OrderCancelled,
+                    OrderStatus.Shipped => _messageBrokerSettings.Topics.OrderShipped,
+                    OrderStatus.Delivered => _messageBrokerSettings.Topics.OrderDelivered,
+                    _ => _messageBrokerSettings.Topics.OrderUpdated
+                };
+
+                var orderEvent = new OrderStatusChangedEvent
+                {
+                    OrderId = order.Id.ToString(),
+                    OrderNumber = order.OrderNumber,
+                    CustomerId = order.CustomerId,
+                    PreviousStatus = updateStatusDto.Status.ToString(), // Note: We don't have previous status, could enhance this
+                    NewStatus = updateStatusDto.Status.ToString(),
+                    UpdatedAt = DateTime.UtcNow,
+                    UpdatedBy = GetCurrentUserId() ?? "system",
+                    CorrelationId = correlationId
+                };
+
+                await _messageBrokerClient.PublishEventAsync(
+                    "aioutlet.events",
+                    routingKey,
+                    orderEvent);
+
+                _logger.Info($"Published order status changed event: {routingKey}", correlationId, new {
+                    orderId = order.Id,
+                    orderNumber = order.OrderNumber,
+                    status = updateStatusDto.Status,
+                    routingKey = routingKey
+                });
+            }
+            catch (Exception eventEx)
+            {
+                _logger.Warn($"Failed to publish order status changed event, but order was updated: {eventEx.Message}", correlationId, new {
+                    orderId = order.Id,
+                    status = updateStatusDto.Status,
+                    error = eventEx.Message
+                });
+            }
+
+            _logger.OperationComplete("UPDATE_ORDER_STATUS", stopwatch, correlationId, new {
+                orderId = id,
+                orderNumber = order.OrderNumber,
+                newStatus = order.Status,
+                endpoint = "PUT /api/orders/{id}/status"
+            });
 
             return Ok(order);
         }
         catch (Exception ex)
         {
-            _logger.Error($"Error updating status for order: {{OrderId}} - {ex.Message}", GetCorrelationId(), new { OrderId = id, Exception = ex });
+            _logger.OperationFailed("UPDATE_ORDER_STATUS", stopwatch, ex, correlationId, new {
+                orderId = id,
+                newStatus = updateStatusDto.Status,
+                endpoint = "PUT /api/orders/{id}/status"
+            });
             return StatusCode(500, "An error occurred while updating the order status");
         }
     }
@@ -330,20 +408,83 @@ public class OrdersController : ControllerBase
     [Authorize(Policy = "AdminOnly")]
     public async Task<ActionResult> DeleteOrder(Guid id)
     {
+        var correlationId = GetCorrelationId();
+        var stopwatch = _logger.OperationStart("DELETE_ORDER", correlationId, new { 
+            operation = "DELETE_ORDER",
+            endpoint = "DELETE /api/orders/{id}",
+            orderId = id
+        });
+
         try
         {
+            // Get order details before deletion for event publishing
+            var order = await _orderService.GetOrderByIdAsync(id);
+            
+            if (order == null)
+            {
+                _logger.Warn($"Order with ID {id} not found", correlationId, new {
+                    orderId = id,
+                    endpoint = "DELETE /api/orders/{id}"
+                });
+                return NotFound($"Order with ID {id} not found");
+            }
+
             var result = await _orderService.DeleteOrderAsync(id);
             
             if (!result)
             {
+                _logger.Warn($"Failed to delete order with ID {id}", correlationId, new {
+                    orderId = id,
+                    endpoint = "DELETE /api/orders/{id}"
+                });
                 return NotFound($"Order with ID {id} not found");
             }
+
+            // Publish order deleted event
+            try
+            {
+                var orderDeletedEvent = new OrderDeletedEvent
+                {
+                    OrderId = order.Id.ToString(),
+                    OrderNumber = order.OrderNumber,
+                    CustomerId = order.CustomerId,
+                    DeletedAt = DateTime.UtcNow,
+                    DeletedBy = GetCurrentUserId() ?? "system",
+                    CorrelationId = correlationId
+                };
+
+                await _messageBrokerClient.PublishEventAsync(
+                    "aioutlet.events",
+                    "order.deleted",
+                    orderDeletedEvent);
+
+                _logger.Info("Published order deleted event", correlationId, new {
+                    orderId = order.Id,
+                    orderNumber = order.OrderNumber
+                });
+            }
+            catch (Exception eventEx)
+            {
+                _logger.Warn($"Failed to publish order deleted event, but order was deleted: {eventEx.Message}", correlationId, new {
+                    orderId = order.Id,
+                    error = eventEx.Message
+                });
+            }
+
+            _logger.OperationComplete("DELETE_ORDER", stopwatch, correlationId, new {
+                orderId = id,
+                orderNumber = order.OrderNumber,
+                endpoint = "DELETE /api/orders/{id}"
+            });
 
             return NoContent();
         }
         catch (Exception ex)
         {
-            _logger.Error($"Error deleting order: {{OrderId}} - {ex.Message}", GetCorrelationId(), new { OrderId = id, Exception = ex });
+            _logger.OperationFailed("DELETE_ORDER", stopwatch, ex, correlationId, new {
+                orderId = id,
+                endpoint = "DELETE /api/orders/{id}"
+            });
             return StatusCode(500, "An error occurred while deleting the order");
         }
     }

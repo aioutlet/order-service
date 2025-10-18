@@ -2,28 +2,38 @@ namespace OrderService.Core.Configuration;
 
 /// <summary>
 /// Message broker configuration settings
+/// Supports both HTTP integration (via message-broker-service) and direct broker connections
 /// </summary>
 public class MessageBrokerSettings
 {
     public const string SectionName = "MessageBroker";
 
     /// <summary>
-    /// Message broker provider (RabbitMQ, AzureServiceBus)
+    /// Message broker provider (RabbitMQ, Kafka, AzureServiceBus)
     /// </summary>
     public string Provider { get; set; } = "RabbitMQ";
 
     /// <summary>
+    /// Message broker service HTTP integration settings
+    /// Used by API to publish events via message-broker-service
+    /// </summary>
+    public MessageBrokerServiceSettings Service { get; set; } = new();
+
+    /// <summary>
     /// RabbitMQ configuration
+    /// Used by Worker for direct connection
     /// </summary>
     public RabbitMQSettings RabbitMQ { get; set; } = new();
 
     /// <summary>
     /// Kafka configuration
+    /// Used by Worker for direct connection
     /// </summary>
     public KafkaSettings Kafka { get; set; } = new();
 
     /// <summary>
     /// Azure Service Bus configuration
+    /// Used by Worker for direct connection
     /// </summary>
     public AzureServiceBusSettings AzureServiceBus { get; set; } = new();
 
@@ -31,6 +41,30 @@ public class MessageBrokerSettings
     /// Topic/Queue names
     /// </summary>
     public MessagingTopics Topics { get; set; } = new();
+}
+
+/// <summary>
+/// Message broker service HTTP integration settings
+/// For API process to publish events via message-broker-service
+/// </summary>
+public class MessageBrokerServiceSettings
+{
+    /// <summary>
+    /// Message broker service base URL
+    /// Default: http://localhost:4000
+    /// </summary>
+    public string Url { get; set; } = "http://localhost:4000";
+
+    /// <summary>
+    /// Optional API key for authentication
+    /// </summary>
+    public string? ApiKey { get; set; }
+
+    /// <summary>
+    /// HTTP request timeout in seconds
+    /// Default: 30 seconds
+    /// </summary>
+    public int TimeoutSeconds { get; set; } = 30;
 }
 
 /// <summary>
@@ -140,4 +174,14 @@ public class MessagingTopics
     /// Order cancelled event topic/queue
     /// </summary>
     public string OrderCancelled { get; set; } = "order.cancelled";
+
+    /// <summary>
+    /// Order shipped event topic/queue
+    /// </summary>
+    public string OrderShipped { get; set; } = "order.shipped";
+
+    /// <summary>
+    /// Order delivered event topic/queue
+    /// </summary>
+    public string OrderDelivered { get; set; } = "order.delivered";
 }

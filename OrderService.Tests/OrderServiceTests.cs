@@ -19,7 +19,7 @@ public class OrderServiceTests
 {
     private readonly Mock<IOrderRepository> _mockOrderRepository;
     private readonly EnhancedLogger _logger;
-    private readonly Mock<IMessagePublisher> _mockMessagePublisher;
+    private readonly Mock<MessageBrokerServiceClient> _mockMessageBrokerClient;
     private readonly Mock<IOptions<MessageBrokerSettings>> _mockMessageBrokerSettings;
     private readonly Mock<ICurrentUserService> _mockCurrentUserService;
     private readonly OrderService.Core.Services.OrderService _orderService;
@@ -28,7 +28,14 @@ public class OrderServiceTests
     public OrderServiceTests()
     {
         _mockOrderRepository = new Mock<IOrderRepository>();
-        _mockMessagePublisher = new Mock<IMessagePublisher>();
+        
+        // Mock MessageBrokerServiceClient dependencies
+        var mockHttpClient = new HttpClient();
+        var mockBrokerLogger = new Mock<ILogger<MessageBrokerServiceClient>>();
+        var mockBrokerSettings = new Mock<IOptions<MessageBrokerSettings>>();
+        mockBrokerSettings.Setup(x => x.Value).Returns(new MessageBrokerSettings());
+        
+        _mockMessageBrokerClient = new Mock<MessageBrokerServiceClient>(mockHttpClient, mockBrokerLogger.Object, mockBrokerSettings.Object);
         _mockMessageBrokerSettings = new Mock<IOptions<MessageBrokerSettings>>();
         _mockCurrentUserService = new Mock<ICurrentUserService>();
 
@@ -79,7 +86,7 @@ public class OrderServiceTests
         _orderService = new OrderService.Core.Services.OrderService(
             _mockOrderRepository.Object,
             _logger,
-            _mockMessagePublisher.Object,
+            _mockMessageBrokerClient.Object,
             _mockMessageBrokerSettings.Object,
             _mockCurrentUserService.Object
         );
@@ -259,7 +266,7 @@ public class OrderServiceTests
         result.Status.Should().Be(OrderStatus.Created);
         result.Currency.Should().Be("USD");
         _mockOrderRepository.Verify(x => x.CreateOrderAsync(It.IsAny<Order>()), Times.Once);
-        _mockMessagePublisher.Verify(x => x.PublishAsync(It.IsAny<string>(), It.IsAny<object>(), It.IsAny<CancellationToken>()), Times.Once);
+        _mockMessageBrokerClient.Verify(x => x.PublishEventAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<object>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

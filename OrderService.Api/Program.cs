@@ -74,8 +74,8 @@ builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.Configure<MessageBrokerSettings>(
     builder.Configuration.GetSection(MessageBrokerSettings.SectionName));
 
-// Register HTTP message publisher for API (publishes via HTTP to message-broker-service)
-builder.Services.AddHttpClient<IMessagePublisher, HttpMessagePublisher>();
+// Register message broker service client for API (publishes via HTTP to message-broker-service)
+builder.Services.AddHttpClient<MessageBrokerServiceClient>();
 
 Console.WriteLine("Starting Order Service in API mode...");
 
