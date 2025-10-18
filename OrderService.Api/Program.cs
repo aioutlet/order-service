@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.OpenApi.Models;
 using FluentValidation;
 using OrderService.Core.Data;
@@ -9,9 +8,8 @@ using OrderService.Core.Services;
 using OrderService.Core.Services.Messaging;
 using OrderService.Core.Extensions;
 using OrderService.Core.Middlewares;
-using OrderService.Api.Middlewares;
 using OrderService.Core.Validators;
-using OrderService.Api.Observability;
+using OrderService.Core.Observability;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -26,9 +24,6 @@ builder.Services.Configure<ApiSettings>(
 
 // Add services to the container.
 builder.Services.AddControllers();
-
-// Add rate limiting
-builder.Services.AddRateLimitingServices(builder.Configuration);
 
 // Add FluentValidation
 builder.Services.AddValidatorsFromAssemblyContaining<CreateOrderDtoValidator>();
@@ -95,9 +90,6 @@ var app = builder.Build();
 
 // Add correlation ID middleware (before error handling)
 app.UseCorrelationId();
-
-// Add rate limiting (after correlation ID, before authentication)
-app.UseOrderServiceRateLimiting(builder.Configuration);
 
 // Add global error handling middleware
 app.UseErrorHandling();

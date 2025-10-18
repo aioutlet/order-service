@@ -1,10 +1,14 @@
+using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using OrderService.Core.Observability.Logging;
 using OrderService.Core.Observability.Tracing;
 using Serilog;
 using Serilog.Events;
 using Serilog.Sinks.SystemConsole.Themes;
 
-namespace OrderService.Api.Observability;
+namespace OrderService.Core.Observability;
 
 /// <summary>
 /// Main observability configuration and setup
