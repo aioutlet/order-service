@@ -5,6 +5,7 @@ using OrderService.Core.Configuration;
 using OrderService.Core.Repositories;
 using OrderService.Core.Services;
 using OrderService.Core.Services.Messaging;
+using OrderService.Core.Extensions;
 using OrderService.Worker;
 using OrderService.Worker.Handlers;
 
@@ -30,6 +31,10 @@ builder.Services.AddDbContext<OrderDbContext>(options =>
 // Register repositories and services
 builder.Services.AddScoped<IOrderRepository, OrderRepository>();
 builder.Services.AddScoped<IOrderService, OrderService.Core.Services.OrderService>();
+
+// Register current user service (for system/worker context)
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 
 // Register RabbitMQ connection service
 builder.Services.AddSingleton<IRabbitMQConnectionService, RabbitMQConnectionService>();

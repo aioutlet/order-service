@@ -1,15 +1,13 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
-using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
-using System.Text;
 using FluentValidation;
 using OrderService.Core.Data;
 using OrderService.Core.Configuration;
 using OrderService.Core.Repositories;
 using OrderService.Core.Services;
 using OrderService.Core.Services.Messaging;
+using OrderService.Core.Extensions;
 using OrderService.Api.Middlewares;
 using OrderService.Core.Validators;
 using OrderService.Api.Observability;
@@ -24,8 +22,6 @@ builder.Services.Configure<OrderServiceSettings>(
     builder.Configuration.GetSection(OrderServiceSettings.SectionName));
 builder.Services.Configure<ApiSettings>(
     builder.Configuration.GetSection(ApiSettings.SectionName));
-builder.Services.Configure<JwtSettings>(
-    builder.Configuration.GetSection(JwtSettings.SectionName));
 
 // Add services to the container.
 builder.Services.AddControllers();
@@ -65,37 +61,9 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
-// Add JWT Authentication
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
-    {
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuer = true,
-            ValidateAudience = true,
-            ValidateLifetime = true,
-            ValidateIssuerSigningKey = true,
-            ValidIssuer = builder.Configuration["Jwt:Issuer"],
-            ValidAudience = builder.Configuration["Jwt:Audience"],
-            IssuerSigningKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"] ?? throw new InvalidOperationException("JWT Key not configured")))
-        };
-    });
-
-// Add Authorization policies
-builder.Services.AddAuthorization(options =>
-{
-    options.AddPolicy("CustomerOnly", policy => 
-        policy.RequireClaim("roles", "customer"));
-    
-    options.AddPolicy("AdminOnly", policy => 
-        policy.RequireClaim("roles", "admin"));
-    
-    options.AddPolicy("CustomerOrAdmin", policy => 
-        policy.RequireAssertion(context =>
-            context.User.HasClaim("roles", "customer") || 
-            context.User.HasClaim("roles", "admin")));
-});
+// Add JWT Authentication and Authorization (from OrderService.Core)
+builder.Services.AddJwtAuthentication(builder.Configuration);
+builder.Services.AddOrderServiceAuthorization();
 
 // Add Entity Framework with PostgreSQL
 builder.Services.AddDbContext<OrderDbContext>(options =>
