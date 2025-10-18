@@ -16,12 +16,6 @@ var builder = WebApplication.CreateBuilder(args);
 // Add observability (logging and tracing) - this should be first
 builder.AddObservability();
 
-// Add configuration settings
-builder.Services.Configure<OrderServiceSettings>(
-    builder.Configuration.GetSection(OrderServiceSettings.SectionName));
-builder.Services.Configure<ApiSettings>(
-    builder.Configuration.GetSection(ApiSettings.SectionName));
-
 // Add services to the container.
 builder.Services.AddControllers();
 

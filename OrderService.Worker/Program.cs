@@ -17,8 +17,6 @@ builder.Logging.AddConsole();
 builder.Logging.AddDebug();
 
 // Add configuration settings
-builder.Services.Configure<OrderServiceSettings>(
-    builder.Configuration.GetSection(OrderServiceSettings.SectionName));
 builder.Services.Configure<MessageBrokerSettings>(
     builder.Configuration.GetSection(MessageBrokerSettings.SectionName));
 

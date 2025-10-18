@@ -1,7 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Options;
 using System.Diagnostics;
-using OrderService.Core.Configuration;
 
 namespace OrderService.Controllers;
 
@@ -12,12 +10,12 @@ namespace OrderService.Controllers;
 [ApiController]
 public class OperationalController : ControllerBase
 {
-    private readonly ApiSettings _apiSettings;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<OperationalController> _logger;
 
-    public OperationalController(IOptions<ApiSettings> apiSettings, ILogger<OperationalController> logger)
+    public OperationalController(IConfiguration configuration, ILogger<OperationalController> logger)
     {
-        _apiSettings = apiSettings.Value;
+        _configuration = configuration;
         _logger = logger;
     }
 
@@ -33,9 +31,9 @@ public class OperationalController : ControllerBase
         return Ok(new 
         { 
             status = "healthy",
-            service = "order-service",
+            service = _configuration["ServiceName"] ?? "order-service",
             timestamp = DateTime.UtcNow,
-            version = Environment.GetEnvironmentVariable("API_VERSION") ?? _apiSettings.Version
+            version = _configuration["ServiceVersion"] ?? "1.0.0"
         });
     }
 

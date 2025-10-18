@@ -19,18 +19,15 @@ public class OrderServiceTests
 {
     private readonly Mock<IOrderRepository> _mockOrderRepository;
     private readonly EnhancedLogger _logger;
-    private readonly Mock<IOptions<OrderServiceSettings>> _mockOrderServiceSettings;
     private readonly Mock<IMessagePublisher> _mockMessagePublisher;
     private readonly Mock<IOptions<MessageBrokerSettings>> _mockMessageBrokerSettings;
     private readonly Mock<ICurrentUserService> _mockCurrentUserService;
     private readonly OrderService.Core.Services.OrderService _orderService;
-    private readonly OrderServiceSettings _orderServiceSettings;
     private readonly MessageBrokerSettings _messageBrokerSettings;
 
     public OrderServiceTests()
     {
         _mockOrderRepository = new Mock<IOrderRepository>();
-        _mockOrderServiceSettings = new Mock<IOptions<OrderServiceSettings>>();
         _mockMessagePublisher = new Mock<IMessagePublisher>();
         _mockMessageBrokerSettings = new Mock<IOptions<MessageBrokerSettings>>();
         _mockCurrentUserService = new Mock<ICurrentUserService>();
@@ -62,15 +59,6 @@ public class OrderServiceTests
         _logger = new EnhancedLogger(mockLogger.Object, configuration);
 
         // Setup configuration
-        _orderServiceSettings = new OrderServiceSettings
-        {
-            DefaultCurrency = "USD",
-            TaxRate = 0.08m,
-            FreeShippingThreshold = 100.00m,
-            DefaultShippingCost = 10.00m,
-            OrderNumberPrefix = "ORD"
-        };
-
         _messageBrokerSettings = new MessageBrokerSettings
         {
             Provider = "RabbitMQ",
@@ -82,7 +70,6 @@ public class OrderServiceTests
             }
         };
 
-        _mockOrderServiceSettings.Setup(x => x.Value).Returns(_orderServiceSettings);
         _mockMessageBrokerSettings.Setup(x => x.Value).Returns(_messageBrokerSettings);
 
         // Setup common current user service
@@ -92,7 +79,6 @@ public class OrderServiceTests
         _orderService = new OrderService.Core.Services.OrderService(
             _mockOrderRepository.Object,
             _logger,
-            _mockOrderServiceSettings.Object,
             _mockMessagePublisher.Object,
             _mockMessageBrokerSettings.Object,
             _mockCurrentUserService.Object
@@ -271,7 +257,7 @@ public class OrderServiceTests
         result.Should().NotBeNull();
         result.CustomerId.Should().Be(createOrderDto.CustomerId);
         result.Status.Should().Be(OrderStatus.Created);
-        result.Currency.Should().Be(_orderServiceSettings.DefaultCurrency);
+        result.Currency.Should().Be("USD");
         _mockOrderRepository.Verify(x => x.CreateOrderAsync(It.IsAny<Order>()), Times.Once);
         _mockMessagePublisher.Verify(x => x.PublishAsync(It.IsAny<string>(), It.IsAny<object>(), It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -693,9 +679,9 @@ public class OrderServiceTests
 
         // Assert
         result.Should().NotBeNull();
-        result.OrderNumber.Should().StartWith(_orderServiceSettings.OrderNumberPrefix);
+        result.OrderNumber.Should().StartWith("ORD");
         _mockOrderRepository.Verify(x => x.CreateOrderAsync(It.Is<Order>(o => 
-            o.OrderNumber.StartsWith(_orderServiceSettings.OrderNumberPrefix))), Times.Once);
+            o.OrderNumber.StartsWith("ORD"))), Times.Once);
     }
 
     #endregion

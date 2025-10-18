@@ -1,7 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Options;
 using System.Diagnostics;
-using OrderService.Core.Configuration;
 
 namespace OrderService.Controllers;
 
@@ -9,12 +7,12 @@ namespace OrderService.Controllers;
 [Route("api/[controller]")]
 public class HomeController : ControllerBase
 {
-    private readonly ApiSettings _apiSettings;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<HomeController> _logger;
 
-    public HomeController(IOptions<ApiSettings> apiSettings, ILogger<HomeController> logger)
+    public HomeController(IConfiguration configuration, ILogger<HomeController> logger)
     {
-        _apiSettings = apiSettings.Value;
+        _configuration = configuration;
         _logger = logger;
     }
 
@@ -30,8 +28,8 @@ public class HomeController : ControllerBase
         return Ok(new 
         { 
             message = "Welcome to the Order Service",
-            service = "Order Service",
-            description = _apiSettings.Description
+            service = _configuration["ServiceName"] ?? "Order Service",
+            description = "RESTful API for managing orders in the e-commerce platform"
         });
     }
 
@@ -44,13 +42,12 @@ public class HomeController : ControllerBase
     {
         _logger.LogInformation("Version information requested");
         
-        var version = Environment.GetEnvironmentVariable("API_VERSION") ?? _apiSettings.Version;
+        var version = _configuration["ServiceVersion"] ?? "1.0.0";
         
         return Ok(new 
         { 
             version = version,
-            service = "Order Service",
-            title = _apiSettings.Title,
+            service = _configuration["ServiceName"] ?? "Order Service",
             environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Unknown"
         });
     }

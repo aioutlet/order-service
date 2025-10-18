@@ -16,9 +16,15 @@ namespace OrderService.Core.Services;
 /// </summary>
 public class OrderService : IOrderService
 {
+    // Business constants - TODO: Move to database/Admin UI in future
+    private const string DEFAULT_CURRENCY = "USD";
+    private const decimal TAX_RATE = 0.08m;
+    private const decimal FREE_SHIPPING_THRESHOLD = 100.0m;
+    private const decimal DEFAULT_SHIPPING_COST = 10.0m;
+    private const string ORDER_NUMBER_PREFIX = "ORD";
+
     private readonly IOrderRepository _orderRepository;
     private readonly EnhancedLogger _logger;
-    private readonly OrderServiceSettings _settings;
     private readonly IMessagePublisher _messagePublisher;
     private readonly MessageBrokerSettings _messageBrokerSettings;
     private readonly ICurrentUserService _currentUserService;
@@ -26,14 +32,12 @@ public class OrderService : IOrderService
     public OrderService(
         IOrderRepository orderRepository, 
         EnhancedLogger logger,
-        IOptions<OrderServiceSettings> settings,
         IMessagePublisher messagePublisher,
         IOptions<MessageBrokerSettings> messageBrokerSettings,
         ICurrentUserService currentUserService)
     {
         _orderRepository = orderRepository;
         _logger = logger;
-        _settings = settings.Value;
         _messagePublisher = messagePublisher;
         _messageBrokerSettings = messageBrokerSettings.Value;
         _currentUserService = currentUserService;
@@ -166,7 +170,7 @@ public class OrderService : IOrderService
                 Status = OrderStatus.Created,
                 PaymentStatus = PaymentStatus.Pending,
                 ShippingStatus = ShippingStatus.NotShipped,
-                Currency = _settings.DefaultCurrency,
+                Currency = DEFAULT_CURRENCY,
                 CreatedBy = currentUser,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
@@ -217,10 +221,10 @@ public class OrderService : IOrderService
                 Country = createOrderDto.BillingAddress.Country
             };
 
-            // Calculate order totals using configuration
+            // Calculate order totals
             order.Subtotal = subtotal;
-            order.TaxAmount = subtotal * (decimal)_settings.TaxRate;
-            order.ShippingCost = subtotal > (decimal)_settings.FreeShippingThreshold ? 0 : (decimal)_settings.DefaultShippingCost;
+            order.TaxAmount = subtotal * TAX_RATE;
+            order.ShippingCost = subtotal > FREE_SHIPPING_THRESHOLD ? 0 : DEFAULT_SHIPPING_COST;
             order.DiscountAmount = 0;
             order.TotalAmount = order.Subtotal + order.TaxAmount + order.ShippingCost - order.DiscountAmount;
 
@@ -488,7 +492,7 @@ public class OrderService : IOrderService
     /// </summary>
     private string GenerateOrderNumber()
     {
-        return $"{_settings.OrderNumberPrefix}-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid().ToString("N")[..8].ToUpper()}";
+        return $"{ORDER_NUMBER_PREFIX}-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid().ToString("N")[..8].ToUpper()}";
     }
 
     /// <summary>
