@@ -23,7 +23,9 @@ builder.Services.Configure<MessageBrokerSettings>(
 
 // Add Entity Framework with PostgreSQL
 builder.Services.AddDbContext<OrderDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseSqlServer(
+        builder.Configuration.GetConnectionString("DefaultConnection"),
+        b => b.MigrationsAssembly("OrderService.Api")));
 
 // Register repositories and services
 builder.Services.AddScoped<IOrderRepository, OrderRepository>();
