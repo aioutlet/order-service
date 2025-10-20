@@ -455,7 +455,7 @@ public class OrdersController : ControllerBase
 
                 await _messageBrokerClient.PublishEventAsync(
                     "aioutlet.events",
-                    "order.deleted",
+                    _messageBrokerSettings.Topics.OrderDeleted,
                     orderDeletedEvent);
 
                 _logger.Info("Published order deleted event", correlationId, new {

@@ -184,4 +184,9 @@ public class MessagingTopics
     /// Order delivered event topic/queue
     /// </summary>
     public string OrderDelivered { get; set; } = "order.delivered";
+
+    /// <summary>
+    /// Order deleted event topic/queue
+    /// </summary>
+    public string OrderDeleted { get; set; } = "order.deleted";
 }
