@@ -92,6 +92,28 @@ Console.WriteLine("Starting Order Service API with embedded consumer (replaces W
 
 var app = builder.Build();
 
+// Apply database migrations on startup
+using (var scope = app.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+    var logger = services.GetRequiredService<ILogger<Program>>();
+    try
+    {
+        var context = services.GetRequiredService<OrderDbContext>();
+        logger.LogInformation("Checking database connection...");
+        
+        // This will create the database if it doesn't exist and apply all pending migrations
+        await context.Database.MigrateAsync();
+        
+        logger.LogInformation("Database migrations applied successfully");
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "An error occurred while migrating the database");
+        throw; // Rethrow to prevent app startup with an invalid database state
+    }
+}
+
 // Configure the HTTP request pipeline.
 
 // Add correlation ID middleware (before error handling)
