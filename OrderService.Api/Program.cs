@@ -77,7 +77,18 @@ builder.Services.Configure<MessageBrokerSettings>(
 // Register message broker service client for API (publishes via HTTP to message-broker-service)
 builder.Services.AddHttpClient<MessageBrokerServiceClient>();
 
-Console.WriteLine("Starting Order Service in API mode...");
+// Register message broker adapter factory and adapter for embedded consumer
+builder.Services.AddSingleton<MessageBrokerAdapterFactory>();
+builder.Services.AddSingleton<IMessageBrokerAdapter>(sp =>
+{
+    var factory = sp.GetRequiredService<MessageBrokerAdapterFactory>();
+    return factory.CreateAdapter();
+});
+
+// Register embedded consumer as hosted service (replaces OrderService.Worker)
+builder.Services.AddHostedService<OrderService.Api.Consumers.OrderStatusConsumerService>();
+
+Console.WriteLine("Starting Order Service API with embedded consumer (replaces Worker)...");
 
 var app = builder.Build();
 

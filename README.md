@@ -17,36 +17,45 @@ A robust, production-ready order management microservice built with ASP.NET Core
 
 ## 🏗️ Architecture
 
-### Two-Process Architecture
+### Embedded Consumer Architecture
 
-The Order Service consists of two separate processes with different messaging patterns:
+The Order Service uses a **single-process architecture** with an embedded event consumer, following industry best practices (Amazon, Netflix pattern):
 
-**OrderService.Api** (REST API)
+**OrderService.Api** (REST API + Consumer)
 
-- Publishes events via HTTP to `message-broker-service`
+- **Publishes events** via HTTP to `message-broker-service` (for OrderCreated, OrderCancelled, etc.)
+- **Consumes events** directly from message broker (RabbitMQ, Kafka, or Azure Service Bus)
 - Uses environment variables: `MESSAGE_BROKER_SERVICE_URL` (default: http://localhost:4000)
-- Configuration: `MessageBroker:Topics` section in appsettings.json
+- Configuration: `MessageBroker` section in appsettings.json
 
-**OrderService.Worker** (Background Consumer)
+**Why Single Process?**
 
-- Consumes events directly from RabbitMQ
-- Direct RabbitMQ connection for better performance when consuming
-- Configuration: `MessageBroker:RabbitMQ:ConnectionString` in appsettings.json
+- ✅ **No code duplication** - Shared business logic in single deployment
+- ✅ **Single database connection pool** - Better resource utilization
+- ✅ **Simplified deployment** - One container, one process, one configuration
+- ✅ **No version skew** - API and consumer always in sync
+- ✅ **Easier monitoring** - Single process to monitor and debug
+- ✅ **Better performance** - No inter-process communication overhead
 
-This hybrid approach provides the best of both worlds:
+**Embedded Consumer:**
 
-- API uses message-broker-service for consistent integration patterns across microservices
-- Worker uses direct RabbitMQ connection for efficient event consumption
+The API includes `OrderStatusConsumerService` as a BackgroundService that:
+
+- Subscribes to `order.status.changed` events from Order Processor Service
+- Updates order status in database using the same `IOrderService` as the API
+- Supports **any message broker** (RabbitMQ, Kafka, Azure Service Bus) via `IMessageBrokerAdapter`
+- Runs in the same process as the REST API for optimal resource sharing
 
 ### Project Structure
 
 ```
 OrderService/
-├── OrderService.Api/        # REST API process
-├── OrderService.Worker/     # Background consumer process
+├── OrderService.Api/        # REST API + Embedded Consumer
+│   ├── Controllers/        # REST endpoints
+│   └── Consumers/          # Background consumer service
 ├── OrderService.Core/       # Shared business logic
 │   ├── Services/           # Business logic layer
-│   │   ├── Messaging/      # Message publisher implementations
+│   │   ├── Messaging/      # Message broker adapters
 │   │   └── IOrderService   # Service interfaces
 │   ├── Repositories/       # Data access layer
 │   ├── Models/
@@ -96,15 +105,27 @@ Jwt__ExpiryInMinutes=60
 
 ### Message Broker Configuration
 
+The Order Service supports **multiple message brokers** for maximum flexibility:
+
 ```bash
-# RabbitMQ
+# RabbitMQ (default)
 MessageBroker__Provider=RabbitMQ
 MessageBroker__RabbitMQ__ConnectionString=amqp://guest:guest@localhost:5672/
+MessageBroker__RabbitMQ__Exchange=aioutlet.events
+MessageBroker__RabbitMQ__ExchangeType=topic
+
+# Kafka (alternative)
+MessageBroker__Provider=Kafka
+MessageBroker__Kafka__BootstrapServers=localhost:9092
+MessageBroker__Kafka__GroupId=order-service-group
 
 # Azure Service Bus (alternative)
 MessageBroker__Provider=AzureServiceBus
 MessageBroker__AzureServiceBus__ConnectionString=Endpoint=sb://...
+MessageBroker__AzureServiceBus__TopicName=order-events
 ```
+
+The embedded consumer automatically uses the configured broker via the `IMessageBrokerAdapter` interface.
 
 ## 🚀 Getting Started
 
@@ -178,17 +199,26 @@ MessageBroker__AzureServiceBus__ConnectionString=Endpoint=sb://...
 
 ## 🔄 Event-Driven Architecture
 
-The service publishes events to a configurable message broker when significant order operations occur:
+The service publishes and consumes events via a configurable message broker:
 
 ### Events Published
 
 - **OrderCreatedEvent**: Published when a new order is created
+- **OrderCancelledEvent**: Published when an order is cancelled
+- **OrderUpdatedEvent**: Published when order details change
+
+### Events Consumed
+
+- **OrderStatusChangedEvent**: Consumed from Order Processor Service (saga orchestrator)
+  - Updates order status based on saga execution results
+  - Reflects Payment, Inventory, and Shipping service outcomes
 
 ### Message Broker Support
 
 - **RabbitMQ**: Topic-based routing with configurable exchanges
+- **Kafka**: Consumer groups with topic subscriptions
 - **Azure Service Bus**: Topic/subscription pattern with managed identity support
-- **Configurable**: Switch between providers via configuration
+- **Broker-Agnostic**: Switch between providers via configuration without code changes
 
 ## 🧪 Testing
 
