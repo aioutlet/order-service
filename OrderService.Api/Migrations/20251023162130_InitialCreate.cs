@@ -17,7 +17,7 @@ namespace OrderService.Api.Migrations
                 {
                     Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     CustomerId = table.Column<string>(type: "nvarchar(24)", maxLength: 24, nullable: false),
-                    OrderNumber = table.Column<string>(type: "nvarchar(20)", maxLength: 20, nullable: false),
+                    OrderNumber = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
                     Status = table.Column<int>(type: "int", nullable: false),
                     PaymentStatus = table.Column<int>(type: "int", nullable: false),
                     ShippingStatus = table.Column<int>(type: "int", nullable: false),

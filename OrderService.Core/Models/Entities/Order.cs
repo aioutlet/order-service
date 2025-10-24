@@ -13,7 +13,7 @@ public class Order
     public string CustomerId { get; set; } = string.Empty;
     
     [Required]
-    [StringLength(20)]
+    [StringLength(50)] // Increased from 20 to accommodate date-based order numbers
     public string OrderNumber { get; set; } = string.Empty;
     
     public OrderStatus Status { get; set; } = OrderStatus.Created;

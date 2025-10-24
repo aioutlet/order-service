@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
+using Microsoft.Extensions.Options;
 using FluentValidation;
 using OrderService.Core.Data;
 using OrderService.Core.Configuration;
@@ -18,7 +19,11 @@ var builder = WebApplication.CreateBuilder(args);
 builder.AddObservability();
 
 // Add services to the container.
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+    });
 
 // Add FluentValidation
 builder.Services.AddValidatorsFromAssemblyContaining<CreateOrderDtoValidator>();
@@ -75,7 +80,24 @@ builder.Services.Configure<MessageBrokerSettings>(
     builder.Configuration.GetSection(MessageBrokerSettings.SectionName));
 
 // Register message broker service client for API (publishes via HTTP to message-broker-service)
-builder.Services.AddHttpClient<MessageBrokerServiceClient>();
+builder.Services.AddHttpClient<MessageBrokerServiceClient>((serviceProvider, client) =>
+{
+    var settings = serviceProvider.GetRequiredService<IOptions<MessageBrokerSettings>>().Value;
+    
+    // Configure HttpClient base address (environment variable overrides config)
+    var messageBrokerUrl = Environment.GetEnvironmentVariable("MESSAGE_BROKER_SERVICE_URL") 
+        ?? settings.Service.Url;
+    client.BaseAddress = new Uri(messageBrokerUrl);
+    client.Timeout = TimeSpan.FromSeconds(settings.Service.TimeoutSeconds);
+    
+    // Add API key if configured (environment variable overrides config)
+    var apiKey = Environment.GetEnvironmentVariable("MESSAGE_BROKER_API_KEY") 
+        ?? settings.Service.ApiKey;
+    if (!string.IsNullOrEmpty(apiKey))
+    {
+        client.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
+    }
+});
 
 // Register message broker adapter factory and adapter for embedded consumer
 builder.Services.AddSingleton<MessageBrokerAdapterFactory>();

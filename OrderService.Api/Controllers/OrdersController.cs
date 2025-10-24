@@ -196,7 +196,11 @@ public class OrdersController : ControllerBase
                     actualCustomerId = customerId,
                     endpoint = "POST /api/orders"
                 });
-                return Forbid("You can only create orders for yourself");
+                return StatusCode(403, new { 
+                    message = "You can only create orders for yourself",
+                    requestedCustomerId = createOrderDto.CustomerId,
+                    authenticatedCustomerId = customerId
+                });
             }
 
             var order = await _orderService.CreateOrderAsync(createOrderDto, correlationId);
@@ -502,7 +506,8 @@ public class OrdersController : ControllerBase
     /// </summary>
     private string? GetCurrentUserId()
     {
-        return User.FindFirst("sub")?.Value;
+        // Try 'id' claim first (from auth-service), then fall back to 'sub' (standard)
+        return User.FindFirst("id")?.Value ?? User.FindFirst("sub")?.Value;
     }
     
     /// <summary>

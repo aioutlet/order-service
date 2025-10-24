@@ -34,22 +34,8 @@ public class MessageBrokerServiceClient
         _logger = logger;
         _settings = settings.Value;
 
-        // Configure HttpClient base address (environment variable overrides config)
-        var messageBrokerUrl = Environment.GetEnvironmentVariable("MESSAGE_BROKER_SERVICE_URL") 
-            ?? _settings.Service.Url;
-        _httpClient.BaseAddress = new Uri(messageBrokerUrl);
-        _httpClient.Timeout = TimeSpan.FromSeconds(_settings.Service.TimeoutSeconds);
-        
-        // Add API key if configured (environment variable overrides config)
-        var apiKey = Environment.GetEnvironmentVariable("MESSAGE_BROKER_API_KEY") 
-            ?? _settings.Service.ApiKey;
-        if (!string.IsNullOrEmpty(apiKey))
-        {
-            _httpClient.DefaultRequestHeaders.Add("X-API-Key", apiKey);
-        }
-
-        _logger.LogInformation("MessageBrokerServiceClient configured with URL: {Url}, Timeout: {Timeout}s", 
-            messageBrokerUrl, _settings.Service.TimeoutSeconds);
+        // HttpClient is now configured in Program.cs during service registration
+        _logger.LogInformation("MessageBrokerServiceClient initialized");
     }
 
     /// <summary>
@@ -68,12 +54,11 @@ public class MessageBrokerServiceClient
     {
         try
         {
+            // Use routing key as topic (message-broker-service uses topic as RabbitMQ routing key)
             var payload = new
             {
-                exchange = exchange,
-                routingKey = routingKey,
-                message = message,
-                timestamp = DateTime.UtcNow
+                topic = routingKey,  // e.g., "order.created"
+                data = message
             };
 
             var json = JsonSerializer.Serialize(payload);
@@ -81,10 +66,10 @@ public class MessageBrokerServiceClient
 
             _logger.LogInformation(
                 "Publishing event to message-broker-service: {Exchange}/{RoutingKey}", 
-                exchange, 
+                exchange,
                 routingKey);
 
-            var response = await _httpClient.PostAsync("/api/events/publish", content, cancellationToken);
+            var response = await _httpClient.PostAsync("/api/v1/events/publish", content, cancellationToken);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -99,7 +84,7 @@ public class MessageBrokerServiceClient
 
             _logger.LogInformation(
                 "Successfully published event to message-broker-service: {Exchange}/{RoutingKey}", 
-                exchange, 
+                exchange,
                 routingKey);
         }
         catch (HttpRequestException ex)

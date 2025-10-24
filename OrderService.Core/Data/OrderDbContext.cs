@@ -21,7 +21,7 @@ namespace OrderService.Core.Data
             {
                 entity.ToTable("Orders");
                 entity.HasKey(e => e.Id);
-                entity.Property(e => e.OrderNumber).IsRequired().HasMaxLength(20);
+                entity.Property(e => e.OrderNumber).IsRequired().HasMaxLength(50);
                 entity.Property(e => e.CustomerId).IsRequired();
                 entity.Property(e => e.Currency).HasMaxLength(3);
                 entity.Property(e => e.CreatedBy).IsRequired();
