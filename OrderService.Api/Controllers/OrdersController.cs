@@ -148,7 +148,7 @@ public class OrdersController : ControllerBase
                     orderOwner = order.CustomerId,
                     endpoint = "GET /api/orders/{id}"
                 });
-                return Forbid("You can only view your own orders");
+                return StatusCode(403, new { message = "You can only view your own orders" });
             }
 
             _logger.OperationComplete("GET_ORDER", stopwatch, correlationId, new {
@@ -334,13 +334,13 @@ public class OrdersController : ControllerBase
     {
         try
         {
-            var customerIdFromToken = User.FindFirst("sub")?.Value;
-            var isAdmin = User.HasClaim("roles", "admin");
+            var customerIdFromToken = GetCurrentUserId();
+            var isAdmin = IsCurrentUserAdmin();
             
             // Customers can only view their own orders, admins can view any customer's orders
             if (!isAdmin && customerIdFromToken != customerId)
             {
-                return Forbid("You can only view your own orders");
+                return StatusCode(403, new { message = "You can only view your own orders" });
             }
 
             var orders = await _orderService.GetOrdersByCustomerIdAsync(customerId);
@@ -365,13 +365,13 @@ public class OrdersController : ControllerBase
     {
         try
         {
-            var customerIdFromToken = User.FindFirst("sub")?.Value;
-            var isAdmin = User.HasClaim("roles", "admin");
+            var customerIdFromToken = GetCurrentUserId();
+            var isAdmin = IsCurrentUserAdmin();
             
             // Customers can only view their own orders, admins can view any customer's orders
             if (!isAdmin && customerIdFromToken != customerId)
             {
-                return Forbid("You can only view your own orders");
+                return StatusCode(403, new { message = "You can only view your own orders" });
             }
 
             var pagedOrders = await _orderService.GetOrdersByCustomerIdPagedAsync(customerId, pageRequest);

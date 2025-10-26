@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
 using Microsoft.Extensions.Options;
 using FluentValidation;
+using FluentValidation.AspNetCore;
 using OrderService.Core.Data;
 using OrderService.Core.Configuration;
 using OrderService.Core.Repositories;
@@ -27,6 +28,7 @@ builder.Services.AddControllers()
 
 // Add FluentValidation
 builder.Services.AddValidatorsFromAssemblyContaining<CreateOrderDtoValidator>();
+builder.Services.AddFluentValidationAutoValidation();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
