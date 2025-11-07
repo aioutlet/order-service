@@ -1,26 +1,19 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
-using Microsoft.Extensions.Options;
 using FluentValidation;
 using FluentValidation.AspNetCore;
 using OrderService.Core.Data;
-using OrderService.Core.Configuration;
 using OrderService.Core.Repositories;
 using OrderService.Core.Services;
-using OrderService.Core.Services.Messaging;
-using OrderService.Core.Services.Messaging.Publishers;
 using OrderService.Core.Extensions;
-using OrderService.Core.Middlewares;
 using OrderService.Core.Validators;
-using OrderService.Core.Observability;
+using OrderService.Core.Utils;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add observability (logging and tracing) - this should be first
-builder.AddObservability();
-
 // Add services to the container.
 builder.Services.AddControllers()
+    .AddDapr() // Add Dapr integration
     .AddJsonOptions(options =>
     {
         options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
@@ -77,42 +70,14 @@ builder.Services.AddScoped<IOrderService, OrderService.Core.Services.OrderServic
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 
-// Configure message broker settings
-builder.Services.Configure<MessageBrokerSettings>(
-    builder.Configuration.GetSection(MessageBrokerSettings.SectionName));
+// Register StandardLogger
+builder.Services.AddSingleton<StandardLogger>();
 
-// Register message broker service client for API (publishes via HTTP to message-broker-service)
-builder.Services.AddHttpClient<MessageBrokerServiceClient>((serviceProvider, client) =>
-{
-    var settings = serviceProvider.GetRequiredService<IOptions<MessageBrokerSettings>>().Value;
-    
-    // Configure HttpClient base address (environment variable overrides config)
-    var messageBrokerUrl = Environment.GetEnvironmentVariable("MESSAGE_BROKER_SERVICE_URL") 
-        ?? settings.Service.Url;
-    client.BaseAddress = new Uri(messageBrokerUrl);
-    client.Timeout = TimeSpan.FromSeconds(settings.Service.TimeoutSeconds);
-    
-    // Add API key if configured (environment variable overrides config)
-    var apiKey = Environment.GetEnvironmentVariable("MESSAGE_BROKER_API_KEY") 
-        ?? settings.Service.ApiKey;
-    if (!string.IsNullOrEmpty(apiKey))
-    {
-        client.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
-    }
-});
+// Register Dapr services
+builder.Services.AddSingleton<DaprSecretService>();
+builder.Services.AddSingleton<DaprEventPublisher>();
 
-// Register message broker adapter factory and adapter for embedded consumer
-builder.Services.AddSingleton<MessageBrokerAdapterFactory>();
-builder.Services.AddSingleton<IMessageBrokerAdapter>(sp =>
-{
-    var factory = sp.GetRequiredService<MessageBrokerAdapterFactory>();
-    return factory.CreateAdapter();
-});
-
-// Register embedded consumer as hosted service (replaces OrderService.Worker)
-builder.Services.AddHostedService<OrderService.Api.Consumers.OrderStatusConsumerService>();
-
-Console.WriteLine("Starting Order Service API with embedded consumer (replaces Worker)...");
+Console.WriteLine("Starting Order Service API with Dapr integration...");
 
 var app = builder.Build();
 
@@ -139,13 +104,6 @@ using (var scope = app.Services.CreateScope())
 }
 
 // Configure the HTTP request pipeline.
-
-// Add correlation ID middleware (before error handling)
-app.UseCorrelationId();
-
-// Add global error handling middleware
-app.UseErrorHandling();
-
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -156,6 +114,10 @@ app.UseHttpsRedirection();
 
 // Add Authentication and Authorization middleware
 app.UseOrderServiceAuthentication();
+
+// Enable Dapr CloudEvents and subscribe handler
+app.UseCloudEvents();
+app.MapSubscribeHandler();
 
 app.MapControllers();
 

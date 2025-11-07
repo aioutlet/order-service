@@ -6,56 +6,38 @@ using Xunit;
 using FluentAssertions;
 using OrderService.Core.Services;
 using OrderService.Core.Repositories;
-using OrderService.Core.Configuration;
 using OrderService.Core.Models.DTOs;
 using OrderService.Core.Models.Entities;
 using OrderService.Core.Models.Enums;
-using OrderService.Core.Services.Messaging;
-using OrderService.Core.Observability.Logging;
+using OrderService.Core.Utils;
 
 namespace OrderService.Tests;
 
 public class OrderServiceTests
 {
     private readonly Mock<IOrderRepository> _mockOrderRepository;
-    private readonly EnhancedLogger _logger;
-    private readonly Mock<MessageBrokerServiceClient> _mockMessageBrokerClient;
-    private readonly Mock<IOptions<MessageBrokerSettings>> _mockMessageBrokerSettings;
+    private readonly StandardLogger _logger;
+    private readonly Mock<DaprEventPublisher> _mockDaprEventPublisher;
     private readonly Mock<ICurrentUserService> _mockCurrentUserService;
     private readonly OrderService.Core.Services.OrderService _orderService;
-    private readonly MessageBrokerSettings _messageBrokerSettings;
 
     public OrderServiceTests()
     {
         _mockOrderRepository = new Mock<IOrderRepository>();
         
-        // Mock MessageBrokerServiceClient dependencies
-        var mockHttpClient = new HttpClient();
-        var mockBrokerLogger = new Mock<ILogger<MessageBrokerServiceClient>>();
-        var mockBrokerSettings = new Mock<IOptions<MessageBrokerSettings>>();
-        mockBrokerSettings.Setup(x => x.Value).Returns(new MessageBrokerSettings());
+        // Mock DaprEventPublisher
+        var mockDaprClient = new Mock<Dapr.Client.DaprClient>();
+        var mockDaprLogger = new Mock<ILogger<DaprEventPublisher>>();
+        _mockDaprEventPublisher = new Mock<DaprEventPublisher>(mockDaprClient.Object, mockDaprLogger.Object);
         
-        _mockMessageBrokerClient = new Mock<MessageBrokerServiceClient>(mockHttpClient, mockBrokerLogger.Object, mockBrokerSettings.Object);
-        _mockMessageBrokerSettings = new Mock<IOptions<MessageBrokerSettings>>();
         _mockCurrentUserService = new Mock<ICurrentUserService>();
 
         // Create real logger with mocked dependencies
-        var mockLogger = new Mock<ILogger<EnhancedLogger>>();
-        
-        // Setup environment variables that EnhancedLogger needs - this avoids configuration issues
-        Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", "Test");
-        Environment.SetEnvironmentVariable("LOG_LEVEL", "Information");
-        Environment.SetEnvironmentVariable("LOG_TO_CONSOLE", "false");
-        Environment.SetEnvironmentVariable("LOG_TO_FILE", "false");
-        Environment.SetEnvironmentVariable("LOG_FORMAT", "json");
-        Environment.SetEnvironmentVariable("ENABLE_TRACING", "false");
-        Environment.SetEnvironmentVariable("SERVICE_NAME", "OrderService.Tests");
-        Environment.SetEnvironmentVariable("SERVICE_VERSION", "1.0.0");
-        Environment.SetEnvironmentVariable("LOG_FILE_PATH", "/tmp/test.log");
+        var mockLogger = new Mock<ILogger<StandardLogger>>();
         
         // Create a simple in-memory configuration
         var configBuilder = new ConfigurationBuilder();
-        configBuilder.AddInMemoryCollection(new Dictionary<string, string>
+        configBuilder.AddInMemoryCollection(new Dictionary<string, string?>
         {
             {"Logging:LogLevel:Default", "Information"},
             {"ServiceName", "OrderService.Tests"},
@@ -63,21 +45,7 @@ public class OrderServiceTests
         });
         var configuration = configBuilder.Build();
         
-        _logger = new EnhancedLogger(mockLogger.Object, configuration);
-
-        // Setup configuration
-        _messageBrokerSettings = new MessageBrokerSettings
-        {
-            Provider = "RabbitMQ",
-            Topics = new MessagingTopics
-            {
-                OrderCreated = "order.created",
-                OrderUpdated = "order.updated",
-                OrderCancelled = "order.cancelled"
-            }
-        };
-
-        _mockMessageBrokerSettings.Setup(x => x.Value).Returns(_messageBrokerSettings);
+        _logger = new StandardLogger(mockLogger.Object, configuration);
 
         // Setup common current user service
         _mockCurrentUserService.Setup(x => x.GetUserName()).Returns("TestUser");
@@ -86,8 +54,7 @@ public class OrderServiceTests
         _orderService = new OrderService.Core.Services.OrderService(
             _mockOrderRepository.Object,
             _logger,
-            _mockMessageBrokerClient.Object,
-            _mockMessageBrokerSettings.Object,
+            _mockDaprEventPublisher.Object,
             _mockCurrentUserService.Object
         );
     }
@@ -266,7 +233,7 @@ public class OrderServiceTests
         result.Status.Should().Be(OrderStatus.Created);
         result.Currency.Should().Be("USD");
         _mockOrderRepository.Verify(x => x.CreateOrderAsync(It.IsAny<Order>()), Times.Once);
-        _mockMessageBrokerClient.Verify(x => x.PublishEventAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<object>(), It.IsAny<CancellationToken>()), Times.Once);
+        _mockDaprEventPublisher.Verify(x => x.PublishEventAsync(It.IsAny<string>(), It.IsAny<object>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

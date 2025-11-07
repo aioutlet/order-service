@@ -404,3 +404,7 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
+
+# Dapr secrets (IMPORTANT - do not commit!)
+.dapr/secrets.json
+.dapr/secrets*.json

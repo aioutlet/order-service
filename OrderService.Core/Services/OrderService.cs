@@ -5,9 +5,7 @@ using OrderService.Core.Models.Entities;
 using OrderService.Core.Models.Enums;
 using OrderService.Core.Models.Events;
 using OrderService.Core.Repositories;
-using OrderService.Core.Services.Messaging;
-using OrderService.Core.Observability.Logging;
-using System.Diagnostics;
+using OrderService.Core.Utils;
 
 namespace OrderService.Core.Services;
 
@@ -24,22 +22,19 @@ public class OrderService : IOrderService
     private const string ORDER_NUMBER_PREFIX = "ORD";
 
     private readonly IOrderRepository _orderRepository;
-    private readonly EnhancedLogger _logger;
-    private readonly MessageBrokerServiceClient _messageBrokerClient;
-    private readonly MessageBrokerSettings _messageBrokerSettings;
+    private readonly StandardLogger _logger;
+    private readonly DaprEventPublisher _daprEventPublisher;
     private readonly ICurrentUserService _currentUserService;
 
     public OrderService(
         IOrderRepository orderRepository, 
-        EnhancedLogger logger,
-        MessageBrokerServiceClient messageBrokerClient,
-        IOptions<MessageBrokerSettings> messageBrokerSettings,
+        StandardLogger logger,
+        DaprEventPublisher daprEventPublisher,
         ICurrentUserService currentUserService)
     {
         _orderRepository = orderRepository;
         _logger = logger;
-        _messageBrokerClient = messageBrokerClient;
-        _messageBrokerSettings = messageBrokerSettings.Value;
+        _daprEventPublisher = daprEventPublisher;
         _currentUserService = currentUserService;
     }
 
@@ -48,24 +43,20 @@ public class OrderService : IOrderService
     /// </summary>
     public async Task<IEnumerable<OrderResponseDto>> GetAllOrdersAsync()
     {
-        var stopwatch = _logger.OperationStart("GET_ALL_ORDERS", null, new {
-            operation = "GET_ALL_ORDERS"
-        });
+        _logger.Info("Getting all orders", null, new { operation = "GET_ALL_ORDERS" });
         
         try
         {
             var orders = await _orderRepository.GetAllOrdersAsync();
             var orderDtos = orders.Select(MapToOrderResponseDto).ToList();
             
-            _logger.OperationComplete("GET_ALL_ORDERS", stopwatch, null, new {
-                orderCount = orderDtos.Count
-            });
+            _logger.Info("Retrieved all orders", null, new { orderCount = orderDtos.Count });
             
             return orderDtos;
         }
         catch (Exception ex)
         {
-            _logger.OperationFailed("GET_ALL_ORDERS", stopwatch, ex, null);
+            _logger.Error("Failed to get all orders", ex);
             throw;
         }
     }
@@ -75,35 +66,24 @@ public class OrderService : IOrderService
     /// </summary>
     public async Task<OrderResponseDto?> GetOrderByIdAsync(Guid id)
     {
-        var stopwatch = _logger.OperationStart("GET_ORDER_BY_ID", null, new {
-            operation = "GET_ORDER_BY_ID",
-            orderId = id
-        });
+        _logger.Info("Getting order by ID", null, new { operation = "GET_ORDER_BY_ID", orderId = id });
         
         try
         {
             var order = await _orderRepository.GetOrderByIdAsync(id);
             if (order == null)
             {
-                _logger.Warn($"Order with ID {id} not found", null, new {
-                    orderId = id,
-                    operation = "GET_ORDER_BY_ID"
-                });
+                _logger.Warn($"Order with ID {id} not found", null, new { orderId = id });
                 return null;
             }
 
-            _logger.OperationComplete("GET_ORDER_BY_ID", stopwatch, null, new {
-                orderId = id,
-                orderNumber = order.OrderNumber
-            });
+            _logger.Info("Retrieved order", null, new { orderId = id, orderNumber = order.OrderNumber });
             
             return MapToOrderResponseDto(order);
         }
         catch (Exception ex)
         {
-            _logger.OperationFailed("GET_ORDER_BY_ID", stopwatch, ex, null, new {
-                orderId = id
-            });
+            _logger.Error($"Failed to get order {id}", ex, null, new { orderId = id });
             throw;
         }
     }
@@ -113,28 +93,20 @@ public class OrderService : IOrderService
     /// </summary>
     public async Task<IEnumerable<OrderResponseDto>> GetOrdersByCustomerIdAsync(string customerId)
     {
-        var stopwatch = _logger.OperationStart("GET_ORDERS_BY_CUSTOMER", null, new {
-            operation = "GET_ORDERS_BY_CUSTOMER",
-            customerId = customerId
-        });
+        _logger.Info("Getting orders by customer", null, new { operation = "GET_ORDERS_BY_CUSTOMER", customerId });
         
         try
         {
             var orders = await _orderRepository.GetOrdersByCustomerIdAsync(customerId);
             var orderDtos = orders.Select(MapToOrderResponseDto).ToList();
             
-            _logger.OperationComplete("GET_ORDERS_BY_CUSTOMER", stopwatch, null, new {
-                customerId = customerId,
-                orderCount = orderDtos.Count
-            });
+            _logger.Info("Retrieved orders for customer", null, new { customerId, orderCount = orderDtos.Count });
             
             return orderDtos;
         }
         catch (Exception ex)
         {
-            _logger.OperationFailed("GET_ORDERS_BY_CUSTOMER", stopwatch, ex, null, new {
-                customerId = customerId
-            });
+            _logger.Error($"Failed to get orders for customer {customerId}", ex, null, new { customerId });
             throw;
         }
     }
@@ -150,8 +122,7 @@ public class OrderService : IOrderService
         // Get current user info
         var currentUser = _currentUserService.GetUserName() ?? _currentUserService.GetUserId() ?? "System";
         
-        var stopwatch = _logger.OperationStart("CREATE_ORDER", currentCorrelationId, new {
-            operation = "CREATE_ORDER",
+        _logger.Info("Creating order", currentCorrelationId, new {
             customerId = createOrderDto.CustomerId,
             orderItemsCount = createOrderDto.Items?.Count ?? 0,
             createdBy = currentUser
@@ -231,7 +202,7 @@ public class OrderService : IOrderService
             // Save to database
             var createdOrder = await _orderRepository.CreateOrderAsync(order);
             
-            _logger.OperationComplete("CREATE_ORDER", stopwatch, currentCorrelationId, new {
+            _logger.Info("Order created", currentCorrelationId, new {
                 orderId = createdOrder.Id,
                 orderNumber = createdOrder.OrderNumber,
                 totalAmount = createdOrder.TotalAmount,
@@ -249,9 +220,8 @@ public class OrderService : IOrderService
             try
             {
                 var orderCreatedEvent = MapToOrderCreatedEvent(createdOrder, currentCorrelationId);
-                await _messageBrokerClient.PublishEventAsync(
-                    "aioutlet.events", 
-                    _messageBrokerSettings.Topics.OrderCreated, 
+                await _daprEventPublisher.PublishEventAsync(
+                    "order.created", 
                     orderCreatedEvent);
                 
                 _logger.Info("Published OrderCreated event", currentCorrelationId, new {
@@ -262,9 +232,9 @@ public class OrderService : IOrderService
             catch (Exception eventEx)
             {
                 // Log error but don't fail the order creation
-                _logger.Error("Failed to publish OrderCreated event", currentCorrelationId, new {
+                _logger.Error("Failed to publish OrderCreated event", eventEx, currentCorrelationId, new {
                     orderNumber = createdOrder.OrderNumber,
-                    error = eventEx
+                    error = eventEx.Message
                 });
             }
 
@@ -272,7 +242,7 @@ public class OrderService : IOrderService
         }
         catch (Exception ex)
         {
-            _logger.OperationFailed("CREATE_ORDER", stopwatch, ex, currentCorrelationId, new {
+            _logger.Error("Failed to create order", ex, currentCorrelationId, new {
                 customerId = createOrderDto.CustomerId
             });
             throw;
@@ -285,8 +255,7 @@ public class OrderService : IOrderService
     public async Task<OrderResponseDto?> UpdateOrderStatusAsync(Guid id, UpdateOrderStatusDto updateStatusDto)
     {
         var currentUser = _currentUserService.GetUserName() ?? _currentUserService.GetUserId() ?? "System";
-        var stopwatch = _logger.OperationStart("UPDATE_ORDER_STATUS", null, new {
-            operation = "UPDATE_ORDER_STATUS",
+        _logger.Info("Updating order status", null, new {
             orderId = id,
             newStatus = updateStatusDto.Status,
             updatedBy = currentUser
@@ -297,10 +266,7 @@ public class OrderService : IOrderService
             var order = await _orderRepository.GetOrderByIdAsync(id);
             if (order == null)
             {
-                _logger.Warn($"Order with ID {id} not found", null, new {
-                    orderId = id,
-                    operation = "UPDATE_ORDER_STATUS"
-                });
+                _logger.Warn($"Order with ID {id} not found", null, new { orderId = id });
                 return null;
             }
 
@@ -311,7 +277,7 @@ public class OrderService : IOrderService
 
             var updatedOrder = await _orderRepository.UpdateOrderAsync(order);
 
-            _logger.OperationComplete("UPDATE_ORDER_STATUS", stopwatch, null, new {
+            _logger.Info("Order status updated", null, new {
                 orderId = id,
                 orderNumber = updatedOrder.OrderNumber,
                 oldStatus = oldStatus,
@@ -330,7 +296,7 @@ public class OrderService : IOrderService
         }
         catch (Exception ex)
         {
-            _logger.OperationFailed("UPDATE_ORDER_STATUS", stopwatch, ex, null, new {
+            _logger.Error($"Failed to update order status for {id}", ex, null, new {
                 orderId = id,
                 newStatus = updateStatusDto.Status
             });
@@ -343,28 +309,20 @@ public class OrderService : IOrderService
     /// </summary>
     public async Task<IEnumerable<OrderResponseDto>> GetOrdersByStatusAsync(OrderStatus status)
     {
-        var stopwatch = _logger.OperationStart("GET_ORDERS_BY_STATUS", null, new {
-            operation = "GET_ORDERS_BY_STATUS",
-            status = status
-        });
+        _logger.Info("Getting orders by status", null, new { status });
         
         try
         {
             var orders = await _orderRepository.GetOrdersByStatusAsync(status);
             var orderDtos = orders.Select(MapToOrderResponseDto).ToList();
             
-            _logger.OperationComplete("GET_ORDERS_BY_STATUS", stopwatch, null, new {
-                status = status,
-                orderCount = orderDtos.Count
-            });
+            _logger.Info("Retrieved orders by status", null, new { status, orderCount = orderDtos.Count });
             
             return orderDtos;
         }
         catch (Exception ex)
         {
-            _logger.OperationFailed("GET_ORDERS_BY_STATUS", stopwatch, ex, null, new {
-                status = status
-            });
+            _logger.Error($"Failed to get orders by status {status}", ex, null, new { status });
             throw;
         }
     }
@@ -374,10 +332,7 @@ public class OrderService : IOrderService
     /// </summary>
     public async Task<bool> DeleteOrderAsync(Guid id)
     {
-        var stopwatch = _logger.OperationStart("DELETE_ORDER", null, new {
-            operation = "DELETE_ORDER",
-            orderId = id
-        });
+        _logger.Info("Deleting order", null, new { orderId = id });
         
         try
         {
@@ -385,30 +340,20 @@ public class OrderService : IOrderService
             
             if (result)
             {
-                _logger.OperationComplete("DELETE_ORDER", stopwatch, null, new {
-                    orderId = id,
-                    deleted = true
-                });
+                _logger.Info("Order deleted", null, new { orderId = id, deleted = true });
                 
-                _logger.Business("ORDER_DELETED", null, new {
-                    orderId = id
-                });
+                _logger.Business("ORDER_DELETED", null, new { orderId = id });
             }
             else
             {
-                _logger.Warn($"Failed to delete order: {id}", null, new {
-                    orderId = id,
-                    operation = "DELETE_ORDER"
-                });
+                _logger.Warn($"Failed to delete order: {id}", null, new { orderId = id });
             }
             
             return result;
         }
         catch (Exception ex)
         {
-            _logger.OperationFailed("DELETE_ORDER", stopwatch, ex, null, new {
-                orderId = id
-            });
+            _logger.Error($"Failed to delete order {id}", ex, null, new { orderId = id });
             throw;
         }
     }
@@ -418,8 +363,7 @@ public class OrderService : IOrderService
     /// </summary>
     public async Task<PagedResponseDto<OrderResponseDto>> GetOrdersPagedAsync(OrderQueryDto query)
     {
-        var stopwatch = _logger.OperationStart("GET_ORDERS_PAGED", null, new {
-            operation = "GET_ORDERS_PAGED",
+        _logger.Info("Getting paged orders", null, new {
             page = query.Page,
             pageSize = query.PageSize,
             status = query.Status,
@@ -431,7 +375,7 @@ public class OrderService : IOrderService
             var (orders, totalCount) = await _orderRepository.GetOrdersPagedAsync(query);
             var orderDtos = orders.Select(MapToOrderResponseDto).ToList();
 
-            _logger.OperationComplete("GET_ORDERS_PAGED", stopwatch, null, new {
+            _logger.Info("Retrieved paged orders", null, new {
                 page = query.Page,
                 pageSize = query.PageSize,
                 returnedCount = orderDtos.Count,
@@ -442,7 +386,7 @@ public class OrderService : IOrderService
         }
         catch (Exception ex)
         {
-            _logger.OperationFailed("GET_ORDERS_PAGED", stopwatch, ex, null, new {
+            _logger.Error("Failed to get paged orders", ex, null, new {
                 page = query.Page,
                 pageSize = query.PageSize,
                 status = query.Status,
@@ -457,9 +401,8 @@ public class OrderService : IOrderService
     /// </summary>
     public async Task<PagedResponseDto<OrderResponseDto>> GetOrdersByCustomerIdPagedAsync(string customerId, PagedRequestDto pageRequest)
     {
-        var stopwatch = _logger.OperationStart("GET_ORDERS_BY_CUSTOMER_PAGED", null, new {
-            operation = "GET_ORDERS_BY_CUSTOMER_PAGED",
-            customerId = customerId,
+        _logger.Info("Getting paged orders by customer", null, new {
+            customerId,
             page = pageRequest.Page,
             pageSize = pageRequest.PageSize
         });
@@ -469,8 +412,8 @@ public class OrderService : IOrderService
             var (orders, totalCount) = await _orderRepository.GetOrdersByCustomerIdPagedAsync(customerId, pageRequest);
             var orderDtos = orders.Select(MapToOrderResponseDto).ToList();
 
-            _logger.OperationComplete("GET_ORDERS_BY_CUSTOMER_PAGED", stopwatch, null, new {
-                customerId = customerId,
+            _logger.Info("Retrieved paged orders for customer", null, new {
+                customerId,
                 page = pageRequest.Page,
                 pageSize = pageRequest.PageSize,
                 returnedCount = orderDtos.Count,
@@ -481,8 +424,8 @@ public class OrderService : IOrderService
         }
         catch (Exception ex)
         {
-            _logger.OperationFailed("GET_ORDERS_BY_CUSTOMER_PAGED", stopwatch, ex, null, new {
-                customerId = customerId,
+            _logger.Error($"Failed to get paged orders for customer {customerId}", ex, null, new {
+                customerId,
                 page = pageRequest.Page,
                 pageSize = pageRequest.PageSize
             });
@@ -561,11 +504,7 @@ public class OrderService : IOrderService
     /// </summary>
     public async Task<OrderStatsDto> GetStatsAsync(bool includeRecent = false, int recentLimit = 10)
     {
-        var stopwatch = _logger.OperationStart("GET_ORDER_STATS", null, new {
-            operation = "GET_ORDER_STATS",
-            includeRecent,
-            recentLimit
-        });
+        _logger.Info("Getting order statistics", null, new { includeRecent, recentLimit });
 
         try
         {
@@ -623,7 +562,7 @@ public class OrderService : IOrderService
                     .ToList();
             }
 
-            _logger.OperationComplete("GET_ORDER_STATS", stopwatch, null, new {
+            _logger.Info("Retrieved order statistics", null, new {
                 total,
                 pending,
                 completed,
@@ -637,7 +576,7 @@ public class OrderService : IOrderService
         }
         catch (Exception ex)
         {
-            _logger.OperationFailed("GET_ORDER_STATS", stopwatch, ex, null, new {
+            _logger.Error("Failed to get order statistics", ex, null, new {
                 includeRecent,
                 recentLimit
             });

@@ -117,52 +117,6 @@ namespace OrderService.Core.Utils
         }
 
         /// <summary>
-        /// Start logging an operation and return a stopwatch for timing
-        /// </summary>
-        public Stopwatch OperationStart(string operation, string? correlationId = null, object? metadata = null)
-        {
-            var stopwatch = Stopwatch.StartNew();
-            using (CreateLogContext(correlationId, CombineMetadata(metadata, new { operation, event_type = "operation_start" })))
-            {
-                _logger.LogInformation("Operation started: {Operation}", operation);
-            }
-            return stopwatch;
-        }
-
-        /// <summary>
-        /// Log operation completion
-        /// </summary>
-        public void OperationComplete(string operation, Stopwatch stopwatch, string? correlationId = null, object? metadata = null)
-        {
-            stopwatch.Stop();
-            using (CreateLogContext(correlationId, CombineMetadata(metadata, new { 
-                operation, 
-                duration_ms = stopwatch.ElapsedMilliseconds,
-                event_type = "operation_complete"
-            })))
-            {
-                _logger.LogInformation("Operation completed: {Operation} in {Duration}ms", operation, stopwatch.ElapsedMilliseconds);
-            }
-        }
-
-        /// <summary>
-        /// Log operation failure
-        /// </summary>
-        public void OperationFailed(string operation, Stopwatch stopwatch, Exception exception, string? correlationId = null, object? metadata = null)
-        {
-            stopwatch.Stop();
-            using (CreateLogContext(correlationId, CombineMetadata(metadata, new { 
-                operation, 
-                duration_ms = stopwatch.ElapsedMilliseconds,
-                event_type = "operation_failed",
-                error = exception.Message
-            })))
-            {
-                _logger.LogError(exception, "Operation failed: {Operation} after {Duration}ms", operation, stopwatch.ElapsedMilliseconds);
-            }
-        }
-
-        /// <summary>
         /// Log business events
         /// </summary>
         public void Business(string eventName, string? correlationId = null, object? metadata = null)
@@ -174,37 +128,6 @@ namespace OrderService.Core.Utils
             })))
             {
                 _logger.LogInformation("Business event: {EventName}", eventName);
-            }
-        }
-
-        /// <summary>
-        /// Log security events
-        /// </summary>
-        public void Security(string eventName, string? correlationId = null, object? metadata = null)
-        {
-            using (CreateLogContext(correlationId, CombineMetadata(metadata, new { 
-                event_name = eventName,
-                event_type = "security",
-                event_category = "security_event"
-            })))
-            {
-                _logger.LogWarning("Security event: {EventName}", eventName);
-            }
-        }
-
-        /// <summary>
-        /// Log performance metrics
-        /// </summary>
-        public void Performance(string operation, long durationMs, string? correlationId = null, object? metadata = null)
-        {
-            using (CreateLogContext(correlationId, CombineMetadata(metadata, new { 
-                operation,
-                duration_ms = durationMs,
-                event_type = "performance",
-                event_category = "performance_metric"
-            })))
-            {
-                _logger.LogInformation("Performance metric: {Operation} took {Duration}ms", operation, durationMs);
             }
         }
 
