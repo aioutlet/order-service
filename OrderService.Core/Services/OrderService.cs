@@ -557,6 +557,95 @@ public class OrderService : IOrderService
     }
 
     /// <summary>
+    /// Get order statistics for admin dashboard
+    /// </summary>
+    public async Task<OrderStatsDto> GetStatsAsync(bool includeRecent = false, int recentLimit = 10)
+    {
+        var stopwatch = _logger.OperationStart("GET_ORDER_STATS", null, new {
+            operation = "GET_ORDER_STATS",
+            includeRecent,
+            recentLimit
+        });
+
+        try
+        {
+            // Get all orders (consider adding caching for large datasets)
+            var allOrders = await _orderRepository.GetAllOrdersAsync();
+
+            // Calculate date boundaries
+            var now = DateTime.UtcNow;
+            var firstDayThisMonth = new DateTime(now.Year, now.Month, 1);
+            var firstDayLastMonth = firstDayThisMonth.AddMonths(-1);
+            var lastDayLastMonth = firstDayThisMonth.AddDays(-1);
+
+            // Aggregate statistics
+            var total = allOrders.Count();
+            var pending = allOrders.Count(o => o.Status == OrderStatus.Created || o.Status == OrderStatus.Confirmed || o.Status == OrderStatus.Processing);
+            var completed = allOrders.Count(o => o.Status == OrderStatus.Delivered);
+            var newThisMonth = allOrders.Count(o => o.CreatedAt >= firstDayThisMonth);
+            var newLastMonth = allOrders.Count(o => o.CreatedAt >= firstDayLastMonth && o.CreatedAt < firstDayThisMonth);
+            var revenue = allOrders
+                .Where(o => o.Status == OrderStatus.Delivered || o.Status == OrderStatus.Shipped)
+                .Sum(o => o.TotalAmount);
+
+            // Calculate growth percentage
+            var growth = newLastMonth > 0
+                ? ((decimal)(newThisMonth - newLastMonth) / newLastMonth) * 100
+                : newThisMonth > 0
+                    ? 100
+                    : 0;
+
+            var stats = new OrderStatsDto
+            {
+                Total = total,
+                Pending = pending,
+                Completed = completed,
+                NewThisMonth = newThisMonth,
+                Growth = Math.Round(growth, 1),
+                Revenue = Math.Round(revenue, 2)
+            };
+
+            // Add recent orders if requested
+            if (includeRecent)
+            {
+                stats.RecentOrders = allOrders
+                    .OrderByDescending(o => o.CreatedAt)
+                    .Take(recentLimit)
+                    .Select(o => new RecentOrderDto
+                    {
+                        Id = o.Id.ToString(),
+                        OrderNumber = o.OrderNumber,
+                        CustomerId = o.CustomerId,
+                        Status = o.Status.ToString(),
+                        TotalAmount = o.TotalAmount,
+                        CreatedAt = o.CreatedAt
+                    })
+                    .ToList();
+            }
+
+            _logger.OperationComplete("GET_ORDER_STATS", stopwatch, null, new {
+                total,
+                pending,
+                completed,
+                newThisMonth,
+                revenue,
+                includeRecent,
+                recentCount = stats.RecentOrders?.Count() ?? 0
+            });
+
+            return stats;
+        }
+        catch (Exception ex)
+        {
+            _logger.OperationFailed("GET_ORDER_STATS", stopwatch, ex, null, new {
+                includeRecent,
+                recentLimit
+            });
+            throw;
+        }
+    }
+
+    /// <summary>
     /// Map Order entity to OrderCreatedEvent for messaging
     /// </summary>
     private static OrderCreatedEvent MapToOrderCreatedEvent(Order order, string correlationId)

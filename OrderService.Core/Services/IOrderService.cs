@@ -52,4 +52,9 @@ public interface IOrderService
     /// Get orders by customer ID with pagination
     /// </summary>
     Task<PagedResponseDto<OrderResponseDto>> GetOrdersByCustomerIdPagedAsync(string customerId, PagedRequestDto pageRequest);
+
+    /// <summary>
+    /// Get order statistics for admin dashboard
+    /// </summary>
+    Task<OrderStatsDto> GetStatsAsync(bool includeRecent = false, int recentLimit = 10);
 }
