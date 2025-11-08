@@ -504,7 +504,7 @@ public class OrderService : IOrderService
     /// </summary>
     public async Task<OrderStatsDto> GetStatsAsync(bool includeRecent = false, int recentLimit = 10)
     {
-        _logger.Info("Getting order statistics", null, new { includeRecent, recentLimit });
+        _logger.Info("Computing order statistics from database", null, new { includeRecent, recentLimit });
 
         try
         {
@@ -555,6 +555,7 @@ public class OrderService : IOrderService
                         Id = o.Id.ToString(),
                         OrderNumber = o.OrderNumber,
                         CustomerId = o.CustomerId,
+                        CustomerName = o.CustomerName,
                         Status = o.Status.ToString(),
                         TotalAmount = o.TotalAmount,
                         CreatedAt = o.CreatedAt
@@ -562,21 +563,21 @@ public class OrderService : IOrderService
                     .ToList();
             }
 
-            _logger.Info("Retrieved order statistics", null, new {
+            _logger.Info("Order statistics computed successfully", null, new {
                 total,
                 pending,
                 completed,
-                newThisMonth,
                 revenue,
+                newThisMonth,
                 includeRecent,
-                recentCount = stats.RecentOrders?.Count() ?? 0
+                recentOrdersCount = stats.RecentOrders?.Count() ?? 0
             });
 
             return stats;
         }
         catch (Exception ex)
         {
-            _logger.Error("Failed to get order statistics", ex, null, new {
+            _logger.Error("Failed to compute order statistics", ex, null, new {
                 includeRecent,
                 recentLimit
             });

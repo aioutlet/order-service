@@ -62,6 +62,11 @@ public class RecentOrderDto
     public string CustomerId { get; set; } = string.Empty;
 
     /// <summary>
+    /// Customer name
+    /// </summary>
+    public string CustomerName { get; set; } = string.Empty;
+
+    /// <summary>
     /// Order status
     /// </summary>
     public string Status { get; set; } = string.Empty;
