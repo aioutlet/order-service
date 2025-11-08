@@ -75,6 +75,50 @@ public class AdminOrdersController : ControllerBase
     }
 
     /// <summary>
+    /// Get a single order by ID (Admin only)
+    /// </summary>
+    /// <route>GET /api/admin/orders/{id}</route>
+    [HttpGet("{id}")]
+    public async Task<ActionResult<OrderResponseDto>> GetOrderById(Guid id)
+    {
+        var correlationId = GetCorrelationId();
+        _logger.Info("Getting order by ID", correlationId, new
+        {
+            endpoint = "GET /api/admin/orders/{id}",
+            orderId = id
+        });
+
+        try
+        {
+            var order = await _orderService.GetOrderByIdAsync(id);
+
+            if (order == null)
+            {
+                _logger.Warn($"Order with ID {id} not found", correlationId, new {
+                    orderId = id,
+                    endpoint = "GET /api/admin/orders/{id}"
+                });
+                return NotFound($"Order with ID {id} not found");
+            }
+
+            _logger.Info("Retrieved order by ID", correlationId, new
+            {
+                orderId = order.Id,
+                orderNumber = order.OrderNumber,
+                status = order.Status,
+                totalAmount = order.TotalAmount
+            });
+
+            return Ok(order);
+        }
+        catch (Exception ex)
+        {
+            _logger.Error($"Error fetching order {id}", ex, correlationId);
+            return StatusCode(500, "An error occurred while fetching the order");
+        }
+    }
+
+    /// <summary>
     /// Get order statistics for admin dashboard
     /// </summary>
     /// <route>GET /api/admin/orders/stats</route>
