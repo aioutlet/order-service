@@ -75,7 +75,7 @@ builder.Services.AddSingleton<StandardLogger>();
 
 // Register Dapr services
 builder.Services.AddSingleton<DaprSecretService>();
-builder.Services.AddSingleton<DaprEventPublisher>();
+builder.Services.AddSingleton<IEventPublisher, DaprEventPublisher>();
 
 Console.WriteLine("Starting Order Service API with Dapr integration...");
 
