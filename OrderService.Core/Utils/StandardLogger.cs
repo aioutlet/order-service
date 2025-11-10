@@ -52,7 +52,18 @@ namespace OrderService.Core.Utils
         /// </summary>
         public void Info(string message, string? correlationId = null, object? metadata = null)
         {
-            using (CreateLogContext(correlationId, metadata))
+            using (CreateLogContext(correlationId, null, null, metadata))
+            {
+                _logger.LogInformation(message);
+            }
+        }
+
+        /// <summary>
+        /// Log an informational message with trace context
+        /// </summary>
+        public void Info(string message, string? traceId, string? spanId, object? metadata = null)
+        {
+            using (CreateLogContext(traceId, traceId, spanId, metadata))
             {
                 _logger.LogInformation(message);
             }
@@ -63,7 +74,7 @@ namespace OrderService.Core.Utils
         /// </summary>
         public void Debug(string message, string? correlationId = null, object? metadata = null)
         {
-            using (CreateLogContext(correlationId, metadata))
+            using (CreateLogContext(correlationId, null, null, metadata))
             {
                 _logger.LogDebug(message);
             }
@@ -74,7 +85,7 @@ namespace OrderService.Core.Utils
         /// </summary>
         public void Warn(string message, string? correlationId = null, object? metadata = null)
         {
-            using (CreateLogContext(correlationId, metadata))
+            using (CreateLogContext(correlationId, null, null, metadata))
             {
                 _logger.LogWarning(message);
             }
@@ -85,7 +96,7 @@ namespace OrderService.Core.Utils
         /// </summary>
         public void Error(string message, Exception? exception = null, string? correlationId = null, object? metadata = null)
         {
-            using (CreateLogContext(correlationId, metadata))
+            using (CreateLogContext(correlationId, null, null, metadata))
             {
                 if (exception != null)
                 {
@@ -103,7 +114,7 @@ namespace OrderService.Core.Utils
         /// </summary>
         public void Fatal(string message, Exception? exception = null, string? correlationId = null, object? metadata = null)
         {
-            using (CreateLogContext(correlationId, metadata))
+            using (CreateLogContext(correlationId, null, null, metadata))
             {
                 if (exception != null)
                 {
@@ -121,7 +132,7 @@ namespace OrderService.Core.Utils
         /// </summary>
         public void Business(string eventName, string? correlationId = null, object? metadata = null)
         {
-            using (CreateLogContext(correlationId, CombineMetadata(metadata, new { 
+            using (CreateLogContext(correlationId, null, null, CombineMetadata(metadata, new { 
                 event_name = eventName,
                 event_type = "business",
                 event_category = "business_event"
@@ -136,6 +147,14 @@ namespace OrderService.Core.Utils
         /// </summary>
         private IDisposable CreateLogContext(string? correlationId, object? metadata)
         {
+            return CreateLogContext(correlationId, null, null, metadata);
+        }
+
+        /// <summary>
+        /// Create a logging context with trace context and metadata
+        /// </summary>
+        private IDisposable CreateLogContext(string? correlationId, string? traceId, string? spanId, object? metadata)
+        {
             var properties = new List<(string, object)>
             {
                 ("Service", _serviceName)
@@ -144,6 +163,16 @@ namespace OrderService.Core.Utils
             if (!string.IsNullOrEmpty(correlationId))
             {
                 properties.Add(("CorrelationId", correlationId));
+            }
+
+            if (!string.IsNullOrEmpty(traceId))
+            {
+                properties.Add(("TraceId", traceId));
+            }
+
+            if (!string.IsNullOrEmpty(spanId))
+            {
+                properties.Add(("SpanId", spanId));
             }
 
             if (metadata != null)

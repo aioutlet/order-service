@@ -9,12 +9,12 @@ namespace OrderService.Core.Extensions;
 public static class MiddlewareExtensions
 {
     /// <summary>
-    /// Adds correlation ID middleware to the pipeline.
-    /// Generates or propagates X-Correlation-ID headers for distributed tracing.
+    /// Adds W3C Trace Context middleware to the pipeline.
+    /// Extracts or generates traceparent headers and propagates trace IDs across requests.
     /// </summary>
-    public static IApplicationBuilder UseCorrelationId(this IApplicationBuilder app)
+    public static IApplicationBuilder UseTraceContext(this IApplicationBuilder app)
     {
-        return app.UseMiddleware<CorrelationIdMiddleware>();
+        return app.UseMiddleware<TraceContextMiddleware>();
     }
 
     /// <summary>

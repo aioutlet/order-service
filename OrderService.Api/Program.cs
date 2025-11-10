@@ -112,6 +112,9 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+// Add W3C Trace Context middleware
+app.UseTraceContext();
+
 // Add Authentication and Authorization middleware
 app.UseOrderServiceAuthentication();
 
