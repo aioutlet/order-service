@@ -1,0 +1,73 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build",
+      "command": "dotnet",
+      "type": "process",
+      "args": [
+        "build",
+        "${workspaceFolder}/OrderService.Api/OrderService.Api.csproj",
+        "/property:GenerateFullPaths=true",
+        "/consoleloggerparameters:NoSummary"
+      ],
+      "problemMatcher": "$msCompile",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "dapr-start",
+      "type": "shell",
+      "command": "dapr",
+      "args": [
+        "run",
+        "--app-id",
+        "order-service",
+        "--app-port",
+        "1006",
+        "--dapr-http-port",
+        "3506",
+        "--dapr-grpc-port",
+        "50006",
+        "--log-level",
+        "error",
+        "--resources-path",
+        "./.dapr",
+        "--config",
+        "./.dapr/config.yaml"
+      ],
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": [
+          {
+            "regexp": ".",
+            "file": 1,
+            "location": 2,
+            "message": 3
+          }
+        ],
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^.*starting Dapr Runtime.*",
+          "endsPattern": "^.*waiting on port.*"
+        }
+      },
+      "dependsOn": "build"
+    },
+    {
+      "label": "dapr-stop",
+      "type": "shell",
+      "command": "dapr",
+      "args": [
+        "stop",
+        "--app-id",
+        "order-service"
+      ],
+      "presentation": {
+        "reveal": "never"
+      }
+    }
+  ]
+}

@@ -3,12 +3,12 @@ kind: Configuration
 metadata:
   name: order-service-config
 spec:
+  features:
+    - name: SchedulerReminders
+      enabled: false
   tracing:
     samplingRate: '1'
     otel:
-      endpointAddress: 'http://localhost:4318'
+      endpointAddress: 'localhost:4318'
       isSecure: false
       protocol: 'http'
-  features:
-    - name: Actors
-      enabled: false

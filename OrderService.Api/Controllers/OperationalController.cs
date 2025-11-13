@@ -40,8 +40,8 @@ public class OperationalController : ControllerBase
     /// <summary>
     /// Readiness probe - check if service is ready to serve traffic
     /// </summary>
-    /// <route>GET /health/ready</route>
-    [HttpGet("/health/ready")]
+    /// <route>GET /readiness</route>
+    [HttpGet("/readiness")]
     public ActionResult<object> Readiness()
     {
         _logger.LogDebug("Readiness check requested");
@@ -82,8 +82,8 @@ public class OperationalController : ControllerBase
     /// <summary>
     /// Liveness probe - check if the app is running
     /// </summary>
-    /// <route>GET /health/live</route>
-    [HttpGet("/health/live")]
+    /// <route>GET /liveness</route>
+    [HttpGet("/liveness")]
     public ActionResult<object> Liveness()
     {
         _logger.LogDebug("Liveness check requested");

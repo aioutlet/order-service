@@ -4,7 +4,7 @@ using System.Diagnostics;
 namespace OrderService.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
+[Route("")]
 public class HomeController : ControllerBase
 {
     private readonly IConfiguration _configuration;
@@ -19,7 +19,7 @@ public class HomeController : ControllerBase
     /// <summary>
     /// Get welcome message
     /// </summary>
-    /// <route>GET /api/home</route>
+    /// <route>GET /</route>
     [HttpGet]
     public ActionResult<object> GetWelcomeMessage()
     {
@@ -36,7 +36,7 @@ public class HomeController : ControllerBase
     /// <summary>
     /// Get API version information
     /// </summary>
-    /// <route>GET /api/home/version</route>
+    /// <route>GET /version</route>
     [HttpGet("version")]
     public ActionResult<object> GetVersion()
     {
