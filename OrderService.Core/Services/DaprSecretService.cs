@@ -23,8 +23,9 @@ public class DaprSecretService
     /// </summary>
     /// <param name="secretName">Name of the secret (e.g., "jwt:secret")</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Secret value or null if not found</returns>
-    public async Task<string?> GetSecretAsync(string secretName, CancellationToken cancellationToken = default)
+    /// <returns>Secret value</returns>
+    /// <exception cref="InvalidOperationException">Thrown when secret is not found</exception>
+    public async Task<string> GetSecretAsync(string secretName, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -42,30 +43,52 @@ public class DaprSecretService
 
             if (secrets == null || secrets.Count == 0)
             {
-                _logger.LogWarning("Secret not found: {SecretKey}", secretKey);
-                return null;
+                var errorMessage = $"Secret '{secretKey}' not found in Dapr secret store '{SecretStoreName}'";
+                _logger.LogError(errorMessage);
+                throw new InvalidOperationException(errorMessage);
             }
 
             // If nested key specified, look for it
-            if (nestedKey != null && secrets.ContainsKey(nestedKey))
+            if (nestedKey != null)
             {
-                return secrets[nestedKey];
+                if (secrets.ContainsKey(nestedKey))
+                {
+                    return secrets[nestedKey];
+                }
+                
+                var errorMessage = $"Nested key '{nestedKey}' not found in secret '{secretKey}'";
+                _logger.LogError(errorMessage);
+                throw new InvalidOperationException(errorMessage);
             }
 
             // Otherwise return the first value
-            return secrets.FirstOrDefault().Value;
+            var value = secrets.FirstOrDefault().Value;
+            if (string.IsNullOrEmpty(value))
+            {
+                var errorMessage = $"Secret '{secretKey}' has no value in Dapr secret store '{SecretStoreName}'";
+                _logger.LogError(errorMessage);
+                throw new InvalidOperationException(errorMessage);
+            }
+
+            return value;
+        }
+        catch (InvalidOperationException)
+        {
+            // Re-throw our custom exceptions
+            throw;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to retrieve secret: {SecretName}", secretName);
-            return null;
+            var errorMessage = $"Failed to retrieve secret '{secretName}' from Dapr: {ex.Message}";
+            _logger.LogError(ex, errorMessage);
+            throw new InvalidOperationException(errorMessage, ex);
         }
     }
 
     /// <summary>
     /// Get JWT configuration from secrets
     /// </summary>
-    public async Task<(string? Secret, string? Issuer, string? Audience)> GetJwtConfigAsync(CancellationToken cancellationToken = default)
+    public async Task<(string Secret, string Issuer, string Audience)> GetJwtConfigAsync(CancellationToken cancellationToken = default)
     {
         var secret = await GetSecretAsync("jwt:secret", cancellationToken);
         var issuer = await GetSecretAsync("jwt:issuer", cancellationToken);
@@ -77,16 +100,8 @@ public class DaprSecretService
     /// <summary>
     /// Get database connection string from secrets
     /// </summary>
-    public async Task<string?> GetDatabaseConnectionStringAsync(CancellationToken cancellationToken = default)
+    public async Task<string> GetDatabaseConnectionStringAsync(CancellationToken cancellationToken = default)
     {
         return await GetSecretAsync("database:connectionString", cancellationToken);
-    }
-
-    /// <summary>
-    /// Get RabbitMQ connection string from secrets
-    /// </summary>
-    public async Task<string?> GetRabbitMQConnectionStringAsync(CancellationToken cancellationToken = default)
-    {
-        return await GetSecretAsync("rabbitmq:connectionString", cancellationToken);
     }
 }
