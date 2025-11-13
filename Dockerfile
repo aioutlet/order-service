@@ -23,54 +23,66 @@ RUN groupadd -r orderuser && useradd -r -g orderuser orderuser
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
-# Copy project file and restore dependencies (better caching)
-COPY ["OrderService/OrderService.csproj", "OrderService/"]
-RUN dotnet restore "OrderService/OrderService.csproj"
+# Copy solution and project files
+COPY ["OrderService.sln", "./"]
+COPY ["OrderService.Core/OrderService.Core.csproj", "OrderService.Core/"]
+COPY ["OrderService.Api/OrderService.Api.csproj", "OrderService.Api/"]
+COPY ["OrderService.Tests/OrderService.Tests.csproj", "OrderService.Tests/"]
 
-# Copy source code and build
+# Restore dependencies
+RUN dotnet restore "OrderService.sln"
+
+# Copy source code
 COPY . .
-RUN dotnet build "OrderService/OrderService.csproj" -c Release -o /app/build
+
+# Build
+WORKDIR "/src/OrderService.Api"
+RUN dotnet build "OrderService.Api.csproj" -c Release -o /app/build
 
 # -----------------------------------------------------------------------------
 # Publish stage - Publish the application
 # -----------------------------------------------------------------------------
 FROM build AS publish
-RUN dotnet publish "OrderService/OrderService.csproj" -c Release -o /app/publish /p:UseAppHost=false
+RUN dotnet publish "OrderService.Api.csproj" -c Release -o /app/publish /p:UseAppHost=false
 
 # -----------------------------------------------------------------------------
 # Development stage - For local development
 # -----------------------------------------------------------------------------
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS development
-WORKDIR /app
+WORKDIR /src
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     curl \
-    postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy project file and restore dependencies
-COPY ["OrderService/OrderService.csproj", "OrderService/"]
-RUN dotnet restore "OrderService/OrderService.csproj"
+# Copy solution and project files
+COPY ["OrderService.sln", "./"]
+COPY ["OrderService.Core/OrderService.Core.csproj", "OrderService.Core/"]
+COPY ["OrderService.Api/OrderService.Api.csproj", "OrderService.Api/"]
+COPY ["OrderService.Tests/OrderService.Tests.csproj", "OrderService.Tests/"]
+
+# Restore dependencies
+RUN dotnet restore "OrderService.sln"
 
 # Copy source code
 COPY . .
 
 # Create non-root user
 RUN groupadd -r orderuser && useradd -r -g orderuser orderuser
-RUN chown -R orderuser:orderuser /app
+RUN chown -R orderuser:orderuser /src
 USER orderuser
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD curl -f http://localhost/health || exit 1
+    CMD curl -f http://localhost:1006/readiness || exit 1
 
 # Expose port
-EXPOSE 80
-EXPOSE 443
+EXPOSE 1006
 
 # Run in development mode with hot reload
-ENTRYPOINT ["dotnet", "watch", "run", "--project", "OrderService/OrderService.csproj", "--urls", "http://0.0.0.0:80"]
+WORKDIR "/src/OrderService.Api"
+ENTRYPOINT ["dotnet", "watch", "run", "--project", "OrderService.Api.csproj", "--urls", "http://0.0.0.0:1006"]
 
 # -----------------------------------------------------------------------------
 # Production stage - Optimized for production deployment
@@ -88,18 +100,17 @@ USER orderuser
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD curl -f http://localhost/health || exit 1
+    CMD curl -f http://localhost:1006/readiness || exit 1
 
 # Expose port
-EXPOSE 80
-EXPOSE 443
+EXPOSE 1006
 
 # Configure ASP.NET Core
-ENV ASPNETCORE_URLS=http://+:80
+ENV ASPNETCORE_URLS=http://+:1006
 ENV ASPNETCORE_ENVIRONMENT=Production
 
 # Entry point
-ENTRYPOINT ["dotnet", "OrderService.dll"]
+ENTRYPOINT ["dotnet", "OrderService.Api.dll"]
 
 # Labels for better image management
 LABEL maintainer="AIOutlet Team"
