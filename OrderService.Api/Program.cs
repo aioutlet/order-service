@@ -75,7 +75,7 @@ builder.Services.AddSingleton<StandardLogger>();
 
 // Register Dapr services
 builder.Services.AddSingleton<DaprSecretService>();
-builder.Services.AddSingleton<DaprEventPublisher>();
+builder.Services.AddSingleton<IEventPublisher, DaprEventPublisher>();
 
 Console.WriteLine("Starting Order Service API with Dapr integration...");
 
@@ -91,14 +91,23 @@ using (var scope = app.Services.CreateScope())
         var context = services.GetRequiredService<OrderDbContext>();
         logger.LogInformation("Checking database connection...");
         
-        // This will create the database if it doesn't exist and apply all pending migrations
-        await context.Database.MigrateAsync();
-        
-        logger.LogInformation("Database migrations applied successfully");
+        // Only apply migrations for relational databases (not in-memory)
+        var isInMemory = context.Database.ProviderName == "Microsoft.EntityFrameworkCore.InMemory";
+        if (!isInMemory)
+        {
+            await context.Database.MigrateAsync();
+            logger.LogInformation("Database migrations applied successfully");
+        }
+        else
+        {
+            // For in-memory databases, just ensure it's created
+            await context.Database.EnsureCreatedAsync();
+            logger.LogInformation("In-memory database created successfully");
+        }
     }
     catch (Exception ex)
     {
-        logger.LogError(ex, "An error occurred while migrating the database");
+        logger.LogError(ex, "An error occurred while setting up the database");
         throw; // Rethrow to prevent app startup with an invalid database state
     }
 }
@@ -125,3 +134,6 @@ app.MapSubscribeHandler();
 app.MapControllers();
 
 app.Run();
+
+// Make the implicit Program class public for integration testing
+public partial class Program { }

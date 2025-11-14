@@ -17,19 +17,14 @@ public class OrderServiceTests
 {
     private readonly Mock<IOrderRepository> _mockOrderRepository;
     private readonly StandardLogger _logger;
-    private readonly Mock<DaprEventPublisher> _mockDaprEventPublisher;
+    private readonly Mock<IEventPublisher> _mockEventPublisher;
     private readonly Mock<ICurrentUserService> _mockCurrentUserService;
     private readonly OrderService.Core.Services.OrderService _orderService;
 
     public OrderServiceTests()
     {
         _mockOrderRepository = new Mock<IOrderRepository>();
-        
-        // Mock DaprEventPublisher
-        var mockDaprClient = new Mock<Dapr.Client.DaprClient>();
-        var mockDaprLogger = new Mock<ILogger<DaprEventPublisher>>();
-        _mockDaprEventPublisher = new Mock<DaprEventPublisher>(mockDaprClient.Object, mockDaprLogger.Object);
-        
+        _mockEventPublisher = new Mock<IEventPublisher>();
         _mockCurrentUserService = new Mock<ICurrentUserService>();
 
         // Create real logger with mocked dependencies
@@ -54,7 +49,7 @@ public class OrderServiceTests
         _orderService = new OrderService.Core.Services.OrderService(
             _mockOrderRepository.Object,
             _logger,
-            _mockDaprEventPublisher.Object,
+            _mockEventPublisher.Object,
             _mockCurrentUserService.Object
         );
     }
@@ -233,7 +228,7 @@ public class OrderServiceTests
         result.Status.Should().Be(OrderStatus.Created);
         result.Currency.Should().Be("USD");
         _mockOrderRepository.Verify(x => x.CreateOrderAsync(It.IsAny<Order>()), Times.Once);
-        _mockDaprEventPublisher.Verify(x => x.PublishEventAsync(It.IsAny<string>(), It.IsAny<object>(), It.IsAny<CancellationToken>()), Times.Once);
+        _mockEventPublisher.Verify(x => x.PublishEventAsync(It.IsAny<string>(), It.IsAny<object>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

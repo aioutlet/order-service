@@ -23,13 +23,13 @@ public class OrderService : IOrderService
 
     private readonly IOrderRepository _orderRepository;
     private readonly StandardLogger _logger;
-    private readonly DaprEventPublisher _daprEventPublisher;
+    private readonly IEventPublisher _daprEventPublisher;
     private readonly ICurrentUserService _currentUserService;
 
     public OrderService(
         IOrderRepository orderRepository, 
         StandardLogger logger,
-        DaprEventPublisher daprEventPublisher,
+        IEventPublisher daprEventPublisher,
         ICurrentUserService currentUserService)
     {
         _orderRepository = orderRepository;

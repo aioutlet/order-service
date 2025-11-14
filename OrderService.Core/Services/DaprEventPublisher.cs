@@ -7,7 +7,7 @@ namespace OrderService.Core.Services;
 /// Dapr-based event publisher for message broker integration
 /// Uses Dapr pub/sub to publish events to RabbitMQ
 /// </summary>
-public class DaprEventPublisher
+public class DaprEventPublisher : IEventPublisher
 {
     private readonly DaprClient _daprClient;
     private readonly ILogger<DaprEventPublisher> _logger;
