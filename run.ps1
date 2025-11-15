@@ -42,15 +42,18 @@ Write-Host "Dapr HTTP Port: 3506" -ForegroundColor Cyan
 Write-Host "Dapr gRPC Port: 50006" -ForegroundColor Cyan
 Write-Host ""
 
+# Get the directory where this script is located
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+
 dapr run `
   --app-id order-service `
   --app-port 1006 `
   --dapr-http-port 3506 `
   --dapr-grpc-port 50006 `
   --log-level error `
-  --resources-path ./.dapr `
-  --config ./.dapr/config.yaml `
-  -- dotnet run --project OrderService.Api/OrderService.Api.csproj --urls "http://localhost:1006"
+  --resources-path "$scriptDir/.dapr/components" `
+  --config "$scriptDir/.dapr/config.yaml" `
+  -- dotnet run --project "$scriptDir/OrderService.Api/OrderService.Api.csproj" --urls "http://localhost:1006"
 
 Write-Host ""
 Write-Host "============================================" -ForegroundColor Cyan

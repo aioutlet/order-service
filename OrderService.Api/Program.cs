@@ -56,11 +56,15 @@ builder.Services.AddSwaggerGen(options =>
 builder.Services.AddJwtAuthentication(builder.Configuration);
 builder.Services.AddOrderServiceAuthorization();
 
-// Add Entity Framework with PostgreSQL
-builder.Services.AddDbContext<OrderDbContext>(options =>
+// Add Entity Framework with SQL Server - Lazy load connection string from Dapr secrets
+builder.Services.AddDbContext<OrderDbContext>((serviceProvider, options) =>
+{
+    var secretService = serviceProvider.GetRequiredService<DaprSecretService>();
+    var connectionString = secretService.GetDatabaseConnectionStringAsync().GetAwaiter().GetResult();
     options.UseSqlServer(
-        builder.Configuration.GetConnectionString("DefaultConnection"),
-        b => b.MigrationsAssembly("OrderService.Api")));
+        connectionString,
+        b => b.MigrationsAssembly("OrderService.Api"));
+});
 
 // Register repositories and services
 builder.Services.AddScoped<IOrderRepository, OrderRepository>();
@@ -81,27 +85,9 @@ Console.WriteLine("Starting Order Service API with Dapr integration...");
 
 var app = builder.Build();
 
-// Apply database migrations on startup
-using (var scope = app.Services.CreateScope())
-{
-    var services = scope.ServiceProvider;
-    var logger = services.GetRequiredService<ILogger<Program>>();
-    try
-    {
-        var context = services.GetRequiredService<OrderDbContext>();
-        logger.LogInformation("Checking database connection...");
-        
-        // This will create the database if it doesn't exist and apply all pending migrations
-        await context.Database.MigrateAsync();
-        
-        logger.LogInformation("Database migrations applied successfully");
-    }
-    catch (Exception ex)
-    {
-        logger.LogError(ex, "An error occurred while migrating the database");
-        throw; // Rethrow to prevent app startup with an invalid database state
-    }
-}
+// Note: Database migrations are NOT run at startup to avoid Dapr timing issues.
+// The database should be migrated separately using: dotnet ef database update
+// The DbContext will connect lazily when first accessed, at which point Dapr will be ready.
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())

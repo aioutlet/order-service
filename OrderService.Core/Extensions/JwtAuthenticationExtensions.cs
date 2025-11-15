@@ -2,8 +2,10 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using OrderService.Core.Configuration;
+using OrderService.Core.Services;
 using System.Text;
 
 namespace OrderService.Core.Extensions;
@@ -14,25 +16,77 @@ namespace OrderService.Core.Extensions;
 public static class JwtAuthenticationExtensions
 {
     /// <summary>
-    /// Adds JWT authentication to the service collection
+    /// Adds JWT authentication to the service collection with lazy loading from Dapr secrets
     /// </summary>
     public static IServiceCollection AddJwtAuthentication(
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        // Add JWT Authentication
+        // Add JWT Authentication with lazy loading of secrets
         services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             .AddJwtBearer(options =>
             {
-                options.TokenValidationParameters = new TokenValidationParameters
+                // Use lazy loading pattern - load JWT secret on first request
+                options.Events = new JwtBearerEvents
                 {
-                    ValidateIssuer = false,           // Auth-service doesn't set issuer in tokens
-                    ValidateAudience = false,         // Auth-service doesn't set audience in tokens
-                    ValidateLifetime = true,          // Validate token expiration
-                    ValidateIssuerSigningKey = true,  // Validate signature with secret key
-                    IssuerSigningKey = new SymmetricSecurityKey(
-                        Encoding.UTF8.GetBytes(configuration["Jwt:Key"] 
-                            ?? throw new InvalidOperationException("JWT Key not configured")))
+                    OnMessageReceived = context =>
+                    {
+                        // Only load JWT configuration once (check if already loaded)
+                        if (options.TokenValidationParameters?.IssuerSigningKey == null)
+                        {
+                            try
+                            {
+                                var secretService = context.HttpContext.RequestServices.GetRequiredService<DaprSecretService>();
+                                var (secret, issuer, audience) = secretService.GetJwtConfigAsync().GetAwaiter().GetResult();
+
+                                if (string.IsNullOrEmpty(secret))
+                                {
+                                    throw new InvalidOperationException("JWT secret not found in Dapr secrets");
+                                }
+
+                                options.TokenValidationParameters = new TokenValidationParameters
+                                {
+                                    ValidateIssuer = false,           // Auth-service doesn't set issuer in tokens
+                                    ValidateAudience = false,         // Auth-service doesn't set audience in tokens
+                                    ValidateLifetime = true,          // Validate token expiration
+                                    ValidateIssuerSigningKey = true,  // Validate signature with secret key
+                                    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret))
+                                };
+                            }
+                            catch (Exception ex)
+                            {
+                                // Check if Dapr secret store is not ready (check all levels of inner exceptions)
+                                var currentEx = ex;
+                                bool isDaprNotReady = false;
+                                while (currentEx != null)
+                                {
+                                    if (currentEx.Message?.Contains("secret store is not configured") == true)
+                                    {
+                                        isDaprNotReady = true;
+                                        break;
+                                    }
+                                    currentEx = currentEx.InnerException;
+                                }
+
+                                if (isDaprNotReady)
+                                {
+                                    // Dapr not ready yet - silently skip authentication for this request
+                                    context.HttpContext.RequestServices
+                                        .GetRequiredService<ILogger<JwtBearerEvents>>()
+                                        .LogWarning("Dapr secret store not ready yet, skipping JWT authentication for this request");
+                                    context.NoResult();
+                                    return Task.CompletedTask;
+                                }
+
+                                // Other errors should still fail
+                                context.HttpContext.RequestServices
+                                    .GetRequiredService<ILogger<JwtBearerEvents>>()
+                                    .LogError(ex, "Failed to load JWT configuration from Dapr secrets");
+                                throw;
+                            }
+                        }
+                        return Task.CompletedTask;
+                    }
                 };
             });
 

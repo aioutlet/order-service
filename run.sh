@@ -36,7 +36,7 @@ dapr run \
   --dapr-http-port 3506 \
   --dapr-grpc-port 50006 \
   --log-level error \
-  --resources-path ./.dapr \
+  --resources-path ./.dapr/components \
   --config ./.dapr/config.yaml \
   -- dotnet run --project OrderService.Api/OrderService.Api.csproj --urls "http://localhost:1006"
 

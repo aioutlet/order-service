@@ -406,5 +406,5 @@ FodyWeavers.xsd
 *.sln.iml
 
 # Dapr secrets (IMPORTANT - do not commit!)
-.dapr/secrets.json
-.dapr/secrets*.json
+# .dapr/secrets.json
+# .dapr/secrets*.json

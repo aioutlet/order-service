@@ -29,43 +29,27 @@ public class DaprSecretService
     {
         try
         {
-            // Split the secret name for nested keys (e.g., "jwt:secret" -> "jwt" with key "secret")
-            var parts = secretName.Split(':', 2);
-            var secretKey = parts[0];
-            var nestedKey = parts.Length > 1 ? parts[1] : null;
+            _logger.LogDebug("Retrieving secret: {SecretName} from store: {StoreName}", secretName, SecretStoreName);
 
-            _logger.LogDebug("Retrieving secret: {SecretKey} from store: {StoreName}", secretKey, SecretStoreName);
-
+            // With nestedSeparator configured in Dapr, request the full key path directly
+            // Dapr will handle the nested structure and return the specific value
             var secrets = await _daprClient.GetSecretAsync(
                 SecretStoreName,
-                secretKey,
+                secretName,
                 cancellationToken: cancellationToken);
 
             if (secrets == null || secrets.Count == 0)
             {
-                var errorMessage = $"Secret '{secretKey}' not found in Dapr secret store '{SecretStoreName}'";
+                var errorMessage = $"Secret '{secretName}' not found in Dapr secret store '{SecretStoreName}'";
                 _logger.LogError(errorMessage);
                 throw new InvalidOperationException(errorMessage);
             }
 
-            // If nested key specified, look for it
-            if (nestedKey != null)
-            {
-                if (secrets.ContainsKey(nestedKey))
-                {
-                    return secrets[nestedKey];
-                }
-                
-                var errorMessage = $"Nested key '{nestedKey}' not found in secret '{secretKey}'";
-                _logger.LogError(errorMessage);
-                throw new InvalidOperationException(errorMessage);
-            }
-
-            // Otherwise return the first value
+            // Dapr returns a dictionary with a single key-value pair for the requested secret
             var value = secrets.FirstOrDefault().Value;
             if (string.IsNullOrEmpty(value))
             {
-                var errorMessage = $"Secret '{secretKey}' has no value in Dapr secret store '{SecretStoreName}'";
+                var errorMessage = $"Secret '{secretName}' has no value in Dapr secret store '{SecretStoreName}'";
                 _logger.LogError(errorMessage);
                 throw new InvalidOperationException(errorMessage);
             }
