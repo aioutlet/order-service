@@ -20,7 +20,7 @@ RUN groupadd -r orderuser && useradd -r -g orderuser orderuser
 # -----------------------------------------------------------------------------
 # Build stage - Build the application
 # -----------------------------------------------------------------------------
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 # Copy solution and project files
@@ -48,7 +48,7 @@ RUN dotnet publish "OrderService.Api.csproj" -c Release -o /app/publish /p:UseAp
 # -----------------------------------------------------------------------------
 # Development stage - For local development
 # -----------------------------------------------------------------------------
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS development
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS development
 WORKDIR /src
 
 # Install system dependencies
