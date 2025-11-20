@@ -51,8 +51,10 @@ public static class JwtAuthenticationExtensions
 
                                 options.TokenValidationParameters = new TokenValidationParameters
                                 {
-                                    ValidateIssuer = false,           // Auth-service doesn't set issuer in tokens
-                                    ValidateAudience = false,         // Auth-service doesn't set audience in tokens
+                                    ValidateIssuer = true,            // Validate issuer (auth-service)
+                                    ValidIssuer = issuer,             // Expected issuer
+                                    ValidateAudience = true,          // Validate audience (aioutlet-platform)
+                                    ValidAudience = audience,         // Expected audience
                                     ValidateLifetime = true,          // Validate token expiration
                                     ValidateIssuerSigningKey = true,  // Validate signature with secret key
                                     IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret))
