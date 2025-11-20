@@ -31,6 +31,11 @@ public static class JwtAuthenticationExtensions
                 {
                     OnMessageReceived = context =>
                     {
+                        var logger = context.HttpContext.RequestServices
+                            .GetRequiredService<ILogger<JwtBearerEvents>>();
+                        logger.LogInformation("JWT OnMessageReceived: Token={Token}", 
+                            context.Request.Headers["Authorization"].ToString());
+                        
                         // Only load JWT configuration once (check if already loaded)
                         if (options.TokenValidationParameters?.IssuerSigningKey == null)
                         {
@@ -85,6 +90,30 @@ public static class JwtAuthenticationExtensions
                                 throw;
                             }
                         }
+                        return Task.CompletedTask;
+                    },
+                    OnTokenValidated = context =>
+                    {
+                        var logger = context.HttpContext.RequestServices
+                            .GetRequiredService<ILogger<JwtBearerEvents>>();
+                        logger.LogInformation("JWT Token validated successfully. User: {User}, Claims: {Claims}",
+                            context.Principal?.Identity?.Name,
+                            string.Join(", ", context.Principal?.Claims?.Select(c => $"{c.Type}={c.Value}") ?? new List<string>()));
+                        return Task.CompletedTask;
+                    },
+                    OnAuthenticationFailed = context =>
+                    {
+                        var logger = context.HttpContext.RequestServices
+                            .GetRequiredService<ILogger<JwtBearerEvents>>();
+                        logger.LogError(context.Exception, "JWT Authentication failed");
+                        return Task.CompletedTask;
+                    },
+                    OnChallenge = context =>
+                    {
+                        var logger = context.HttpContext.RequestServices
+                            .GetRequiredService<ILogger<JwtBearerEvents>>();
+                        logger.LogWarning("JWT Challenge: Error={Error}, ErrorDescription={ErrorDescription}",
+                            context.Error, context.ErrorDescription);
                         return Task.CompletedTask;
                     }
                 };

@@ -48,7 +48,14 @@ public class CurrentUserService : ICurrentUserService
 
     public string? GetUserId()
     {
+        var user = _httpContextAccessor.HttpContext?.User;
+        _logger.LogInformation($"GetUserId - IsAuthenticated: {user?.Identity?.IsAuthenticated}");
+        _logger.LogInformation($"GetUserId - Claims count: {user?.Claims?.Count()}");
+        _logger.LogInformation($"GetUserId - All claims: {string.Join(", ", user?.Claims?.Select(c => $"{c.Type}={c.Value}") ?? new List<string>())}");
+        
         var userId = GetClaimValue(ClaimTypes.NameIdentifier) ?? GetClaimValue("sub");
+        
+        _logger.LogInformation($"GetUserId - Resolved userId: {userId}");
         
         if (string.IsNullOrEmpty(userId))
         {

@@ -1,5 +1,6 @@
 using Dapr.Client;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Configuration;
 
 namespace OrderService.Core.Services;
 
@@ -10,12 +11,14 @@ public class DaprSecretService
 {
     private readonly DaprClient _daprClient;
     private readonly ILogger<DaprSecretService> _logger;
+    private readonly IConfiguration _configuration;
     private const string SecretStoreName = "local-secret-store";
 
-    public DaprSecretService(DaprClient daprClient, ILogger<DaprSecretService> logger)
+    public DaprSecretService(DaprClient daprClient, ILogger<DaprSecretService> logger, IConfiguration configuration)
     {
         _daprClient = daprClient;
         _logger = logger;
+        _configuration = configuration;
     }
 
     /// <summary>
@@ -63,6 +66,18 @@ public class DaprSecretService
         }
         catch (Exception ex)
         {
+            // Fallback to configuration for design-time scenarios (e.g., EF migrations)
+            _logger.LogWarning(ex, "Failed to retrieve secret '{SecretName}' from Dapr, trying configuration fallback", secretName);
+            
+            var fallbackKey = secretName.Replace(':', '_'); // Convert jwt:secret to jwt_secret
+            var fallbackValue = _configuration[fallbackKey];
+            
+            if (!string.IsNullOrEmpty(fallbackValue))
+            {
+                _logger.LogInformation("Using fallback configuration for secret: {SecretName}", secretName);
+                return fallbackValue;
+            }
+
             var errorMessage = $"Failed to retrieve secret '{secretName}' from Dapr: {ex.Message}";
             _logger.LogError(ex, errorMessage);
             throw new InvalidOperationException(errorMessage, ex);

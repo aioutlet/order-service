@@ -87,6 +87,11 @@ public class OrdersController : ControllerBase
     [Authorize(Policy = "CustomerOnly")]
     public async Task<ActionResult<OrderResponseDto>> CreateOrder(CreateOrderDto createOrderDto)
     {
+        // DEBUG: Log all headers
+        _logger.Info($"CreateOrder - Received headers: {string.Join(", ", Request.Headers.Select(h => $"{h.Key}={h.Value}"))}", null, null);
+        _logger.Info($"CreateOrder - User.Identity.IsAuthenticated: {User.Identity?.IsAuthenticated}", null, null);
+        _logger.Info($"CreateOrder - User.Claims: {string.Join(", ", User.Claims.Select(c => $"{c.Type}={c.Value}"))}", null, null);
+        
         var correlationId = GetCorrelationId();
         var customerId = GetCurrentUserId();
        
@@ -196,8 +201,10 @@ public class OrdersController : ControllerBase
     /// </summary>
     private string? GetCurrentUserId()
     {
-        // Try 'id' claim first (from auth-service), then fall back to 'sub' (standard)
-        return User.FindFirst("id")?.Value ?? User.FindFirst("sub")?.Value;
+        // Use standard ClaimTypes.NameIdentifier which the JWT middleware maps 'sub' to
+        return User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? 
+               User.FindFirst("sub")?.Value ?? 
+               User.FindFirst("id")?.Value;
     }
     
     /// <summary>
@@ -205,6 +212,9 @@ public class OrdersController : ControllerBase
     /// </summary>
     private bool IsCurrentUserAdmin()
     {
-        return User.HasClaim("roles", "admin");
+        // Check standard ClaimTypes.Role or custom 'roles' claim
+        return User.HasClaim(System.Security.Claims.ClaimTypes.Role, "admin") || 
+               User.HasClaim("roles", "admin") ||
+               User.HasClaim("role", "admin");
     }
 }
