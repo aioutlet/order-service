@@ -137,6 +137,9 @@ public class OrderService : IOrderService
             var order = new Order
             {
                 CustomerId = createOrderDto.CustomerId,
+                CustomerName = createOrderDto.CustomerName,
+                CustomerEmail = createOrderDto.CustomerEmail,
+                CustomerPhone = createOrderDto.CustomerPhone,
                 OrderNumber = orderNumber,
                 Status = OrderStatus.Created,
                 PaymentStatus = PaymentStatus.Pending,
@@ -558,6 +561,7 @@ public class OrderService : IOrderService
                         CustomerName = o.CustomerName,
                         Status = o.Status.ToString(),
                         TotalAmount = o.TotalAmount,
+                        ItemCount = o.Items.Count,
                         CreatedAt = o.CreatedAt
                     })
                     .ToList();

@@ -77,6 +77,11 @@ public class RecentOrderDto
     public decimal TotalAmount { get; set; }
 
     /// <summary>
+    /// Number of items in order
+    /// </summary>
+    public int ItemCount { get; set; }
+
+    /// <summary>
     /// Created timestamp
     /// </summary>
     public DateTime CreatedAt { get; set; }
