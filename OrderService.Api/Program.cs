@@ -104,9 +104,8 @@ app.UseTraceContext();
 // Add Authentication and Authorization middleware
 app.UseOrderServiceAuthentication();
 
-// Enable Dapr CloudEvents and subscribe handler
+// Enable Dapr CloudEvents for publishing
 app.UseCloudEvents();
-app.MapSubscribeHandler();
 
 app.MapControllers();
 
