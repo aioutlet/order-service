@@ -59,7 +59,7 @@ dapr run `
   --log-level error `
   --resources-path "$scriptDir/.dapr/components" `
   --config "$scriptDir/.dapr/config.yaml" `
-  -- dotnet run --project "$scriptDir/OrderService.Api/OrderService.Api.csproj" --urls "http://localhost:1006"
+  -- dotnet watch --project "$scriptDir/OrderService.Api/OrderService.Api.csproj" --urls "http://localhost:1006"
 
 Write-Host ""
 Write-Host "============================================" -ForegroundColor Cyan
