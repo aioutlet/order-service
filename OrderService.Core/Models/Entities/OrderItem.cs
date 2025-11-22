@@ -16,8 +16,7 @@ public class OrderItem
     
     [Required]
     public string ProductName { get; set; } = string.Empty;
-    
-    public string? ProductSku { get; set; }
+        public string? ProductImageUrl { get; set; };    public string? ProductSku { get; set; }
     public string? ProductDescription { get; set; }
     
     // Product attributes snapshot at time of order (from Product Service)

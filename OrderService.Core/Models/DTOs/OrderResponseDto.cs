@@ -6,6 +6,9 @@ public class OrderResponseDto
 {
     public Guid Id { get; set; }
     public string CustomerId { get; set; } = string.Empty; // MongoDB ObjectId as string
+    public string CustomerName { get; set; } = string.Empty;
+    public string CustomerEmail { get; set; } = string.Empty;
+    public string CustomerPhone { get; set; } = string.Empty;
     public string OrderNumber { get; set; } = string.Empty;
     public OrderStatus Status { get; set; }
     public PaymentStatus PaymentStatus { get; set; }

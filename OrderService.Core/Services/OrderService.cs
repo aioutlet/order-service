@@ -160,6 +160,7 @@ public class OrderService : IOrderService
                 {
                     ProductId = itemDto.ProductId,
                     ProductName = itemDto.ProductName,
+                    ProductImageUrl = itemDto.ProductImageUrl,
                     UnitPrice = itemDto.UnitPrice,
                     Quantity = itemDto.Quantity,
                     TotalPrice = itemDto.UnitPrice * itemDto.Quantity,
@@ -453,6 +454,9 @@ public class OrderService : IOrderService
         {
             Id = order.Id,
             CustomerId = order.CustomerId,
+            CustomerName = order.CustomerName,
+            CustomerEmail = order.CustomerEmail,
+            CustomerPhone = order.CustomerPhone,
             OrderNumber = order.OrderNumber,
             Status = order.Status,
             PaymentStatus = order.PaymentStatus,
@@ -472,6 +476,7 @@ public class OrderService : IOrderService
                 Id = item.Id,
                 ProductId = item.ProductId,
                 ProductName = item.ProductName,
+                ProductImageUrl = item.ProductImageUrl,
                 ProductSku = item.ProductSku,
                 UnitPrice = item.UnitPrice,
                 Quantity = item.Quantity,
