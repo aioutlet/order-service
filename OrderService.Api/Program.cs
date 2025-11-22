@@ -8,8 +8,24 @@ using OrderService.Core.Services;
 using OrderService.Core.Extensions;
 using OrderService.Core.Validators;
 using OrderService.Core.Utils;
+using Serilog;
+using Serilog.Events;
+
+// Configure Serilog with colored console output
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
+    .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
+    .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Command", LogEventLevel.Warning)
+    .Enrich.FromLogContext()
+    .WriteTo.Console(
+        outputTemplate: "{Timestamp:yyyy-MM-dd'T'HH:mm:ss.fff'Z'} [{Level:u3}]: {Message:lj}{NewLine}{Exception}")
+    .CreateLogger();
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Use Serilog for logging
+builder.Host.UseSerilog();
 
 // Add services to the container.
 builder.Services.AddControllers()
@@ -81,8 +97,6 @@ builder.Services.AddSingleton<StandardLogger>();
 builder.Services.AddSingleton<DaprSecretService>();
 builder.Services.AddSingleton<DaprEventPublisher>();
 
-Console.WriteLine("Starting Order Service API with Dapr integration...");
-
 var app = builder.Build();
 
 // Note: Database migrations are NOT run at startup to avoid Dapr timing issues.
@@ -109,4 +123,17 @@ app.UseCloudEvents();
 
 app.MapControllers();
 
-app.Run();
+try
+{
+    Log.Information("Starting Order Service API with Dapr integration");
+    app.Run();
+}
+catch (Exception ex)
+{
+    Log.Fatal(ex, "Order Service terminated unexpectedly");
+    throw;
+}
+finally
+{
+    Log.CloseAndFlush();
+}

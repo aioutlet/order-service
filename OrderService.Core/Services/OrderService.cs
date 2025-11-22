@@ -66,7 +66,7 @@ public class OrderService : IOrderService
     /// </summary>
     public async Task<OrderResponseDto?> GetOrderByIdAsync(Guid id)
     {
-        _logger.Info("Getting order by ID", null, new { operation = "GET_ORDER_BY_ID", orderId = id });
+        _logger.Info($"Getting order by ID: {id}", null, new { operation = "GET_ORDER_BY_ID", orderId = id });
         
         try
         {
@@ -77,7 +77,7 @@ public class OrderService : IOrderService
                 return null;
             }
 
-            _logger.Info("Retrieved order", null, new { orderId = id, orderNumber = order.OrderNumber });
+            _logger.Info($"Retrieved order {order.OrderNumber} (ID: {id})", null, new { orderId = id, orderNumber = order.OrderNumber });
             
             return MapToOrderResponseDto(order);
         }
@@ -93,14 +93,14 @@ public class OrderService : IOrderService
     /// </summary>
     public async Task<IEnumerable<OrderResponseDto>> GetOrdersByCustomerIdAsync(string customerId)
     {
-        _logger.Info("Getting orders by customer", null, new { operation = "GET_ORDERS_BY_CUSTOMER", customerId });
+        _logger.Info($"Getting orders for customer: {customerId}", null, new { operation = "GET_ORDERS_BY_CUSTOMER", customerId });
         
         try
         {
             var orders = await _orderRepository.GetOrdersByCustomerIdAsync(customerId);
             var orderDtos = orders.Select(MapToOrderResponseDto).ToList();
             
-            _logger.Info("Retrieved orders for customer", null, new { customerId, orderCount = orderDtos.Count });
+            _logger.Info($"Retrieved {orderDtos.Count} orders for customer {customerId}", null, new { customerId, orderCount = orderDtos.Count });
             
             return orderDtos;
         }
