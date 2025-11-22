@@ -12,7 +12,7 @@ using OrderService.Core.Data;
 namespace OrderService.Api.Migrations
 {
     [DbContext(typeof(OrderDbContext))]
-    [Migration("20251023162130_InitialCreate")]
+    [Migration("20251122120305_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -238,6 +238,9 @@ namespace OrderService.Api.Migrations
                         .IsRequired()
                         .HasMaxLength(24)
                         .HasColumnType("nvarchar(24)");
+
+                    b.Property<string>("ProductImageUrl")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("ProductName")
                         .IsRequired()

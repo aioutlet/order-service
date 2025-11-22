@@ -80,6 +80,7 @@ namespace OrderService.Api.Migrations
                     OrderId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     ProductId = table.Column<string>(type: "nvarchar(24)", maxLength: 24, nullable: false),
                     ProductName = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    ProductImageUrl = table.Column<string>(type: "nvarchar(max)", nullable: true),
                     ProductSku = table.Column<string>(type: "nvarchar(max)", nullable: true),
                     ProductDescription = table.Column<string>(type: "nvarchar(max)", nullable: true),
                     ProductCategory = table.Column<string>(type: "nvarchar(max)", nullable: true),
