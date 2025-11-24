@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  # SQL Server for Order Service
+  order-sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: order-sqlserver
+    restart: unless-stopped
+    ports:
+      - "1434:1433"
+    environment:
+      SA_PASSWORD: Admin123!
+      ACCEPT_EULA: Y
+      MSSQL_PID: Developer
+    volumes:
+      - order_sqlserver_data:/var/opt/mssql
+    networks:
+      - aioutlet-network
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P Admin123! -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # Order Service (.NET)
+  order-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: order-service
+    restart: unless-stopped
+    ports:
+      - "1003:1003"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:1003
+      - ConnectionStrings__DefaultConnection=Server=order-sqlserver,1433;Database=order_service_db;User Id=sa;Password=Admin123!;TrustServerCertificate=True;
+      - RabbitMQ__Host=rabbitmq-message-broker
+      - RabbitMQ__Port=5672
+      - RabbitMQ__Username=admin
+      - RabbitMQ__Password=admin123
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+    depends_on:
+      order-sqlserver:
+        condition: service_healthy
+    networks:
+      - aioutlet-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:1003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  order_sqlserver_data:
+    name: order_sqlserver_data
+
+networks:
+  aioutlet-network:
+    external: true
